@@ -746,12 +746,13 @@ if HAS_FPDF:
                     mc(pdf, safe_wrap(hu_tip), h=5, size=10)
                 pdf.ln(2)
 
-        # Byte buffer visszaadása
+                # Byte buffer visszaadása
         pdf_buffer = BytesIO()
-        pdf_output = pdf.output(dest="S").encode("latin1", "ignore")
-        pdf_buffer.write(pdf_output)
+        pdf_output = pdf.output(dest="S")  # fpdf2 -> bytearray
+        pdf_buffer.write(bytes(pdf_output))
         pdf_buffer.seek(0)
         return pdf_buffer
+
 
 
 # ====== PDF LETÖLTÉS GOMB ======
