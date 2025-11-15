@@ -31,7 +31,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚽ chatbotfootball training planner – Easy2Coach edzésterv generátor")
+st.title("⚽ chatbotfootball training planner – edzésterv generátor")
 st.markdown(
     """
     Ez az app az **Easy2Coach** scrapelt adatbázisából választ ki gyakorlatokat a megadott
