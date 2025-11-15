@@ -11,7 +11,7 @@ import streamlit as st
 # ====== IDE ÍRD BE A SAJÁT MECCSJÁTÉK KÉPED URL-JÉT ======
 # Pl. ha a GitHubon a repo gyökerébe feltöltöd "match_game.png" néven:
 # MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
-MATCH_GAME_IMAGE_URL = "https://example.com/your_match_game_image.png"  # <-- EZT CSERÉLD LE
+MATCH_GAME_IMAGE_URL = ""https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png""  # <-- EZT CSERÉLD LE
 
 
 # ====== Opcionális fordító EN -> HU ======
@@ -227,7 +227,7 @@ def score_exercise_for_stage(
             score += 2
 
     elif stage == "large":
-        # kis létszám kiszűrése, ha van nagyobb
+        # támogatjuk a nagyobb létszámot
         has_large_tokens = ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8", "9vs9", "9 vs 9"]
         if any(w in blob for w in has_large_tokens):
             score += 6
@@ -575,9 +575,8 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
     c1, c2 = st.columns([1.2, 2])
 
     with c1:
-        # Cél3 esetén fix meccsjáték kép, ha be van pipálva a mérkőzésjáték
-        img_url = None
-        if stage_code == "main" and want_match_game and MATCH_GAME_IMAGE_URL:
+        # Cél3 + meccsjáték: MINDIG a fix kép
+        if stage_code == "main" and want_match_game:
             img_url = MATCH_GAME_IMAGE_URL
         else:
             img_url = get_image_url(ex)
@@ -586,7 +585,7 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
             try:
                 st.image(img_url, use_column_width=True)
             except Exception:
-                st.info("Kép nem tölthető be, de az adatbázis tartalmaz hozzá URL-t.")
+                st.info("Kép nem tölthető be (ellenőrizd az URL-t).")
         else:
             st.info("Ehhez a gyakorlathoz nincs kép-URL (placeholder).")
 
@@ -746,9 +745,8 @@ if HAS_FPDF:
             mc(pdf, f"{idx}. {stage_label}", h=8, size=14)
             pdf.ln(2)
 
-            # Kép (ha van) – Cél3-nál fix match-game kép, ha van URL
-            img_url = None
-            if stage_code == "main" and want_match_game and MATCH_GAME_IMAGE_URL:
+            # Kép (ha van) – Cél3-nál MINDIG a fix match-game kép
+            if stage_code == "main" and want_match_game:
                 img_url = MATCH_GAME_IMAGE_URL
             else:
                 img_url = get_image_url(ex)
