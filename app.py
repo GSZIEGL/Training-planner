@@ -1,5 +1,4 @@
-pip install streamlit fpdf2 deep-translator requests
-streamlit run streamlit_app.py
+
 
 
 import json
