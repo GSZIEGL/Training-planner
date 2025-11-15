@@ -7,7 +7,7 @@ from io import BytesIO
 import requests
 import streamlit as st
 
-# ====== Opciós fordító EN -> HU (ha nem megy, az app attól még működik) ======
+# ====== Opciós fordító EN -> HU ======
 try:
     from deep_translator import GoogleTranslator
     TRANSLATOR = GoogleTranslator(source="en", target="hu")
@@ -15,22 +15,25 @@ except Exception:
     TRANSLATOR = None
 
 
-def en_to_hu(text: str) -> str:
+def en_to_hu(text: str):
     """
-    Angolról magyarra fordít. Ha nincs fordító / hiba van,
-    visszaadja az eredeti angol szöveget, hogy legyen magyar blokk is.
+    Próbál angolról magyarra fordítani.
+    Ha nem sikerül, vagy a fordítás gyakorlatilag ugyanaz, mint az eredeti,
+    akkor None-t ad vissza -> ilyenkor NEM mutatunk külön HU blokkot.
     """
     if not text:
-        return ""
+        return None
     if not TRANSLATOR:
-        return text  # fallback: EN szöveg
+        return None
     try:
         t = TRANSLATOR.translate(text)
         if not t:
-            return text
+            return None
+        if t.strip().lower() == text.strip().lower():
+            return None
         return t
     except Exception:
-        return text
+        return None
 
 
 # ====== STREAMLIT ALAPBEÁLLÍTÁS ======
@@ -419,10 +422,8 @@ want_match_game = st.sidebar.checkbox(
 is_adult_group = any(a in ["Men", "Women's", "Adult"] for a in age_tokens)
 if want_match_game:
     if is_adult_group:
-        # felnőtt: 11v11 / full pitch
         goal3_format_tokens = ["11vs11", "11 vs 11", "full pitch", "match"]
     else:
-        # korosztály szerinti meccsformátum
         tokens_age = age_based_game_tokens(age_tokens)
         if tokens_age:
             goal3_format_tokens = tokens_age
@@ -506,7 +507,9 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
 
     with c2:
         st.markdown(f"**EN title:** {title}")
-        st.markdown(f"**HU cím (gépi vagy EN):** {en_to_hu(title)}")
+        hu_title = en_to_hu(title)
+        if hu_title:
+            st.markdown(f"**HU cím (gépi fordítás):** {hu_title}")
 
         sections = ex.get("sections", {})
         org = sections.get("Organisation") or sections.get("Organization")
@@ -518,9 +521,10 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
                 st.markdown("**Organisation (EN):**")
                 st.write(org)
                 hu_org = en_to_hu(org)
-                st.markdown("---")
-                st.markdown("**Szervezés (HU – gépi / EN):**")
-                st.write(hu_org)
+                if hu_org:
+                    st.markdown("---")
+                    st.markdown("**Szervezés (HU – gépi fordítás):**")
+                    st.write(hu_org)
 
         if proc:
             with st.expander("Process (EN) / Leírás (HU) + coaching pontok"):
@@ -528,9 +532,10 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
                 st.write(proc)
 
                 hu_proc = en_to_hu(proc)
-                st.markdown("---")
-                st.markdown("**Leírás (HU – gépi / EN):**")
-                st.write(hu_proc)
+                if hu_proc:
+                    st.markdown("---")
+                    st.markdown("**Leírás (HU – gépi fordítás):**")
+                    st.write(hu_proc)
 
                 # Coaching pontok – egyszerű mondatbontás
                 st.markdown("---")
@@ -548,9 +553,10 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
                 st.markdown("**Tip (EN):**")
                 st.write(tip)
                 hu_tip = en_to_hu(tip)
-                st.markdown("---")
-                st.markdown("**Megjegyzés (HU – gépi / EN):**")
-                st.write(hu_tip)
+                if hu_tip:
+                    st.markdown("---")
+                    st.markdown("**Megjegyzés (HU – gépi fordítás):**")
+                    st.write(hu_tip)
 
     st.markdown("---")
 
@@ -581,20 +587,27 @@ def safe_wrap(text: str, width: int = 110) -> str:
     return "\n".join(wrapped)
 
 
+# Kis segédfüggvény, hogy a multi_cell előtt mindig bal margón legyünk
+def mc(pdf: "TrainingPDF", text: str, h: float = 5, size: int = 10):
+    if not text:
+        return
+    pdf.set_x(pdf.l_margin)
+    pdf.set_font("DejaVu", size=size)
+    pdf.multi_cell(0, h, text, align="L")
+
+
 if HAS_FPDF:
 
     class TrainingPDF(FPDF):
         def __init__(self):
             super().__init__(orientation="P", unit="mm", format="A4")
-            # Auto page break
             self.set_auto_page_break(auto=True, margin=15)
-            # Unicode font (DejaVuSans.ttf legyen a repo gyökerében)
+            # FONT: DejaVuSans.ttf legyen a repo gyökerében
             self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
             self.set_font("DejaVu", size=11)
 
         def header(self):
-            # Lila header sáv + cím
-            self.set_fill_color(220, 210, 240)  # enyhe lila
+            self.set_fill_color(220, 210, 240)
             self.rect(0, 0, 210, 18, "F")
             self.set_xy(10, 5)
             self.set_font("DejaVu", size=10)
@@ -629,113 +642,113 @@ if HAS_FPDF:
         pdf.ln(15)
 
         pdf.set_font("DejaVu", size=18)
-        pdf.cell(0, 10, "Edzésterv / Training Plan", ln=1)
+        mc(pdf, "Edzésterv / Training Plan", h=8, size=18)
         pdf.ln(4)
 
         pdf.set_font("DejaVu", size=11)
-        pdf.cell(0, 6, f"Korosztály / Age group: {age_label}", ln=1)
-        pdf.cell(0, 6, f"Játékoslétszám / Number of players: {players_raw}", ln=1)
-        pdf.cell(0, 6, f"Össz edzésidő / Total duration: {total_time}", ln=1)
+        mc(pdf, f"Korosztály / Age group: {age_label}", h=6, size=11)
+        mc(pdf, f"Játékoslétszám / Number of players: {players_raw}", h=6, size=11)
+        mc(pdf, f"Össz edzésidő / Total duration: {total_time}", h=6, size=11)
         pdf.ln(4)
-        pdf.cell(0, 6, f"Taktikai cél / Tactical goal: {tact_label}", ln=1)
-        pdf.cell(
-            0, 6,
+        mc(pdf, f"Taktikai cél / Tactical goal: {tact_label}", h=6, size=11)
+        mc(
+            pdf,
             f"Technikai fókusz / Technical focus: {', '.join(tech_selection) if tech_selection else 'nincs megadva'}",
-            ln=1,
+            h=6,
+            size=11,
         )
-        pdf.cell(0, 6, f"Erőnléti fókusz / Physical focus: {phys_label}", ln=1)
-        pdf.cell(
-            0, 6,
+        mc(pdf, f"Erőnléti fókusz / Physical focus: {phys_label}", h=6, size=11)
+        mc(
+            pdf,
             f"Cél3 mérkőzésjáték / Match game on main phase: {'Igen/Yes' if want_match_game else 'Nem/No'}",
-            ln=1
+            h=6,
+            size=11,
         )
 
-        pdf.ln(10)
-        pdf.set_font("DejaVu", size=11)
+        pdf.ln(8)
         intro = (
             "Az edzésterv 4 blokkból áll: bemelegítés, kis létszámú játék, nagyobb létszámú taktikai játék "
-            "és egy fő mérkőzésjáték jellegű feladat. A gyakorlatok angol leíráshoz gépi magyar fordítást is tartalmaznak."
+            "és egy fő mérkőzésjáték jellegű feladat. "
+            "A gyakorlatok angol leíráshoz – ha elérhető – gépi magyar fordítást is tartalmaznak."
         )
-        pdf.multi_cell(0, 5, safe_wrap(intro), align="L")
+        mc(pdf, safe_wrap(intro), h=5, size=11)
 
         # ===== GYAKORLATOK =====
         for idx, (stage_label, ex) in enumerate(plan, start=1):
             pdf.add_page()
             pdf.set_text_color(0, 0, 0)
+
             pdf.set_font("DejaVu", size=14)
-            pdf.cell(0, 8, f"{idx}. {stage_label}", ln=1)
+            mc(pdf, f"{idx}. {stage_label}", h=8, size=14)
             pdf.ln(2)
 
             title = ex.get("title", "Névtelen gyakorlat")
-            pdf.set_font("DejaVu", size=12)
-            pdf.multi_cell(0, 6, safe_wrap(f"EN: {title}"), align="L")
+            mc(pdf, safe_wrap(f"EN: {title}"), h=6, size=12)
             hu_title = en_to_hu(title)
-            pdf.set_font("DejaVu", size=11)
-            pdf.multi_cell(0, 5, safe_wrap(f"HU: {hu_title}"), align="L")
+            if hu_title:
+                mc(pdf, safe_wrap(f"HU: {hu_title}"), h=5, size=11)
 
-            pdf.ln(4)
+            pdf.ln(3)
 
-            # Organisation / Szervezés
             sections = ex.get("sections", {})
             org = sections.get("Organisation") or sections.get("Organization")
             proc = sections.get("Process")
             tip = sections.get("Tip")
 
+            # Organisation
             if org:
-                pdf.set_font("DejaVu", size=11)
-                pdf.set_text_color(60, 0, 90)  # kicsit lilás
-                pdf.cell(0, 7, "Organisation / Szervezés", ln=1)
+                pdf.set_text_color(60, 0, 90)
+                mc(pdf, "Organisation / Szervezés", h=7, size=11)
                 pdf.set_text_color(0, 0, 0)
-                pdf.set_font("DejaVu", size=10)
-                pdf.multi_cell(0, 5, safe_wrap("EN: " + org), align="L")
+                mc(pdf, "EN:", h=5, size=10)
+                mc(pdf, safe_wrap(org), h=5, size=10)
                 hu_org = en_to_hu(org)
-                pdf.ln(2)
-                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_org), align="L")
+                if hu_org:
+                    pdf.ln(1)
+                    mc(pdf, "HU:", h=5, size=10)
+                    mc(pdf, safe_wrap(hu_org), h=5, size=10)
                 pdf.ln(3)
 
-            # Process / Leírás
+            # Process
             if proc:
-                pdf.set_font("DejaVu", size=11)
                 pdf.set_text_color(60, 0, 90)
-                pdf.cell(0, 7, "Process / Leírás", ln=1)
+                mc(pdf, "Process / Leírás", h=7, size=11)
                 pdf.set_text_color(0, 0, 0)
-                pdf.set_font("DejaVu", size=10)
-                pdf.multi_cell(0, 5, safe_wrap("EN: " + proc), align="L")
+                mc(pdf, "EN:", h=5, size=10)
+                mc(pdf, safe_wrap(proc), h=5, size=10)
                 hu_proc = en_to_hu(proc)
-                pdf.ln(2)
-                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_proc), align="L")
+                if hu_proc:
+                    pdf.ln(1)
+                    mc(pdf, "HU:", h=5, size=10)
+                    mc(pdf, safe_wrap(hu_proc), h=5, size=10)
                 pdf.ln(3)
 
-                # Coaching points – EN bullet lista
-                pdf.set_font("DejaVu", size=11)
+                # Coaching points – EN
                 pdf.set_text_color(60, 0, 90)
-                pdf.cell(0, 7, "Coaching points (EN)", ln=1)
+                mc(pdf, "Coaching points (EN)", h=7, size=11)
                 pdf.set_text_color(0, 0, 0)
-                pdf.set_font("DejaVu", size=10)
                 sentences = [s.strip() for s in proc.replace("\n", " ").split(".") if s.strip()]
                 for s in sentences:
-                    bullet_line = "• " + s
-                    pdf.multi_cell(0, 5, safe_wrap(bullet_line), align="L")
-                pdf.ln(3)
-
-            # Tip / Megjegyzés
-            if tip:
-                pdf.set_font("DejaVu", size=11)
-                pdf.set_text_color(60, 0, 90)
-                pdf.cell(0, 7, "Tip / Megjegyzés", ln=1)
-                pdf.set_text_color(0, 0, 0)
-                pdf.set_font("DejaVu", size=10)
-                pdf.multi_cell(0, 5, safe_wrap("EN: " + tip), align="L")
-                hu_tip = en_to_hu(tip)
+                    mc(pdf, "- " + safe_wrap(s), h=5, size=10)
                 pdf.ln(2)
-                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_tip), align="L")
-                pdf.ln(3)
 
-            # 🔴 Eredeti URL-t szándékosan nem írjuk ki.
+            # Tip
+            if tip:
+                pdf.set_text_color(60, 0, 90)
+                mc(pdf, "Tip / Megjegyzés", h=7, size=11)
+                pdf.set_text_color(0, 0, 0)
+                mc(pdf, "EN:", h=5, size=10)
+                mc(pdf, safe_wrap(tip), h=5, size=10)
+                hu_tip = en_to_hu(tip)
+                if hu_tip:
+                    pdf.ln(1)
+                    mc(pdf, "HU:", h=5, size=10)
+                    mc(pdf, safe_wrap(hu_tip), h=5, size=10)
+                pdf.ln(2)
 
-        # Visszaadjuk BytesIO-ként
+        # Byte buffer visszaadása
         pdf_buffer = BytesIO()
-        pdf_output = pdf.output(dest="S").encode("latin1")
+        pdf_output = pdf.output(dest="S").encode("latin1", "ignore")
         pdf_buffer.write(pdf_output)
         pdf_buffer.seek(0)
         return pdf_buffer
