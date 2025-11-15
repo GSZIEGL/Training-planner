@@ -93,6 +93,15 @@ except Exception as e:
 
 st.sidebar.success(f"✅ Betöltött gyakorlatok száma: {len(EX_DB)}")
 
+# ====== EDDIG HASZNÁLT GYAKORLATOK TÁROLÁSA SESSION_STATE-BEN ======
+if "used_urls_history" not in st.session_state:
+    st.session_state["used_urls_history"] = []
+
+st.sidebar.markdown("---")
+if st.sidebar.button("🔁 Gyakorlat-história törlése (újrakezdés)"):
+    st.session_state["used_urls_history"] = []
+    st.sidebar.success("A korábban használt gyakorlatok törölve. Új generálásnál újra felhasználhatók.")
+
 
 # ====== SEGÉDFÜGGVÉNYEK – SZŰRÉS / SCORING ======
 def get_image_url(ex: Dict[str, Any]):
@@ -246,7 +255,7 @@ def score_exercise_for_stage(
             if kw.lower() in blob:
                 score += 5
 
-        # "drill", "circuit", nagyon edzés-jellegű – ne legyen Cél3
+        # "drill", "circuit" stb. – ne legyen Cél3
         if any(w in blob for w in ["drill", "circuit", "course", "pattern only", "coordinative"]):
             score -= 10
         if is_warm_like:
@@ -273,35 +282,71 @@ def pick_exercise_for_stage(
     goal3_profile_keywords: List[str],
     used_urls: set,
     used_images: set,
+    global_used_urls: set = None,
     require_match_game: bool = False
 ):
-    candidates = [ex for ex in EX_DB if matches_age(ex, age_tokens) and ex.get("url") not in used_urls]
-    if not candidates:
-        return None
+    """
+    used_urls: az aktuális edzésterven belül már kiválasztott gyakorlatok
+    global_used_urls: előző edzéstervekben már használt gyakorlatok (session_state)
+    """
+    if global_used_urls is None:
+        global_used_urls = set()
 
-    # Cél3 – mérkőzésjáték szűrés
+    # 1) Próbáljunk olyan gyakorlatokat, amik se a mostani tervben, se globálisan nem szerepeltek
+    candidates = [
+        ex for ex in EX_DB
+        if matches_age(ex, age_tokens)
+        and ex.get("url") not in used_urls
+        and ex.get("url") not in global_used_urls
+    ]
+
+    # 2) Ha így semmi, engedjük vissza a globálisan használtakat, csak az aktuális edzés duplikátjait tiltjuk
+    if not candidates:
+        candidates = [
+            ex for ex in EX_DB
+            if matches_age(ex, age_tokens)
+            and ex.get("url") not in used_urls
+        ]
+        if not candidates:
+            return None
+
+    # ===== Cél3 – külön logika a formátum preferenciára + mérkőzésjátékra =====
     if stage == "main":
         blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
         game_candidates = [ex for ex in candidates if is_game_like_blob(blob_map[id(ex)])]
 
-        if require_match_game and game_candidates:
-            candidates = game_candidates
-        elif require_match_game and not game_candidates:
-            # nincs "game" jelleg, próbáljunk létszám-alapút
-            fmt_tokens_age = age_based_game_tokens(age_tokens)
-            if fmt_tokens_age:
-                fmt_cands = []
-                for ex in candidates:
-                    blob = blob_map[id(ex)]
-                    if any(tok.lower() in blob for tok in fmt_tokens_age):
-                        fmt_cands.append(ex)
-                if fmt_cands:
-                    candidates = fmt_cands
+        if require_match_game:
+            preferred = []
+
+            # Ha van formátum preferencia (pl. 6v6 / 7v7 / 11v11), először azt keressük
+            if goal3_format_tokens:
+                # 1) game-like + formátum-egyezés
+                preferred = [
+                    ex for ex in game_candidates
+                    if any(tok.lower() in blob_map[id(ex)] for tok in goal3_format_tokens)
+                ]
+
+                # 2) ha ilyen nincs, akkor bármilyen, de a preferált létszámot tartalmazó gyakorlat
+                if not preferred:
+                    preferred = [
+                        ex for ex in candidates
+                        if any(tok.lower() in blob_map[id(ex)] for tok in goal3_format_tokens)
+                    ]
+
+            # 3) ha semmi sem passzol a formátumra, de vannak game-like gyakorlatok:
+            if not preferred and game_candidates:
+                preferred = game_candidates
+
+            if preferred:
+                candidates = preferred
+            # ha preferred üres, marad az eredeti candidates (nagyon végső fallback)
+
         else:
-            # nem kötelező meccsjáték – de ha van game-like, előnyben
+            # Nem kötelező meccsjáték, de ha vannak game-like jellegűek, azokat preferáljuk
             if game_candidates:
                 candidates = game_candidates
 
+    # ===== PONTOSZÁM ALAPÚ VÁLASZTÁS =====
     scored = [
         (
             score_exercise_for_stage(
@@ -435,9 +480,11 @@ want_match_game = st.sidebar.checkbox(
     value=True
 )
 
-# ha igen, akkor korosztály alapján finomítjuk a formátum tokeneket
 is_adult_group = any(a in ["Men", "Women's", "Adult"] for a in age_tokens)
-if want_match_game:
+
+# Ha a user konkrét formátumot választ (pl. 6v6), azt NEM írjuk felül.
+# Csak akkor használjuk az életkori ajánlást, ha NINCS formátum preferencia (üres lista).
+if want_match_game and not goal3_format_tokens:
     if is_adult_group:
         goal3_format_tokens = ["11vs11", "11 vs 11", "full pitch", "match"]
     else:
@@ -475,6 +522,7 @@ for label, code in stages:
         goal3_profile_keywords,
         used_urls,
         used_images,
+        global_used_urls=set(st.session_state["used_urls_history"]),
         require_match_game=(code == "main" and want_match_game)
     )
     if ex:
@@ -485,6 +533,12 @@ for label, code in stages:
             used_images.add(img)
     else:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
+
+# Új gyakorlatok URL-jeinek hozzáadása a globális történethez
+for _, ex in plan:
+    url = ex.get("url")
+    if url and url not in st.session_state["used_urls_history"]:
+        st.session_state["used_urls_history"].append(url)
 
 st.subheader("📋 Edzésterv összefoglaló")
 
@@ -770,7 +824,7 @@ st.markdown("### 📄 PDF export")
 
 if not HAS_FPDF:
     st.info(
-        "A PDF export jelenleg nem elérhető, mert az 'fpdf' csomag nincs telepítve. "
+        "A PDF export jelenleg nem elérhető, mert az 'fpdf2' csomag nincs telepítve. "
         "Streamlit Cloudon add hozzá a `fpdf2` csomagot a requirements.txt-be."
     )
 else:
