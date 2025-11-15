@@ -8,6 +8,12 @@ import tempfile
 import requests
 import streamlit as st
 
+# ====== IDE ÍRD BE A SAJÁT MECCSJÁTÉK KÉPED URL-JÉT ======
+# Pl. ha a GitHubon a repo gyökerébe feltöltöd "match_game.png" néven:
+# MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
+MATCH_GAME_IMAGE_URL = "https://example.com/your_match_game_image.png"  # <-- EZT CSERÉLD LE
+
+
 # ====== Opcionális fordító EN -> HU ======
 try:
     from deep_translator import GoogleTranslator
@@ -221,7 +227,9 @@ def score_exercise_for_stage(
             score += 2
 
     elif stage == "large":
-        if any(w in blob for w in ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8"]):
+        # kis létszám kiszűrése, ha van nagyobb
+        has_large_tokens = ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8", "9vs9", "9 vs 9"]
+        if any(w in blob for w in has_large_tokens):
             score += 6
         for kw in goal2_format_tokens:
             if kw.lower() in blob:
@@ -526,7 +534,7 @@ for label, code in stages:
         require_match_game=(code == "main" and want_match_game)
     )
     if ex:
-        plan.append((label, ex))
+        plan.append((label, code, ex))
         used_urls.add(ex.get("url"))
         img = get_image_url(ex)
         if img:
@@ -535,7 +543,7 @@ for label, code in stages:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
 
 # Új gyakorlatok URL-jeinek hozzáadása a globális történethez
-for _, ex in plan:
+for _, _, ex in plan:
     url = ex.get("url")
     if url and url not in st.session_state["used_urls_history"]:
         st.session_state["used_urls_history"].append(url)
@@ -560,14 +568,20 @@ if not plan:
     st.stop()
 
 # ====== GYAKORLATOK MEGJELENÍTÉSE KÁRTYÁKBAN ======
-for idx, (stage_label, ex) in enumerate(plan, start=1):
+for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
     st.markdown(f"### {idx}. {stage_label}")
     title = ex.get("title", "Névtelen gyakorlat")
 
     c1, c2 = st.columns([1.2, 2])
 
     with c1:
-        img_url = get_image_url(ex)
+        # Cél3 esetén fix meccsjáték kép, ha be van pipálva a mérkőzésjáték
+        img_url = None
+        if stage_code == "main" and want_match_game and MATCH_GAME_IMAGE_URL:
+            img_url = MATCH_GAME_IMAGE_URL
+        else:
+            img_url = get_image_url(ex)
+
         if img_url:
             try:
                 st.image(img_url, use_column_width=True)
@@ -725,15 +739,20 @@ if HAS_FPDF:
         mc(pdf, safe_wrap(intro), h=5, size=11)
 
         # ===== GYAKORLATOK =====
-        for idx, (stage_label, ex) in enumerate(plan, start=1):
+        for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
             pdf.add_page()
             pdf.set_text_color(0, 0, 0)
 
             mc(pdf, f"{idx}. {stage_label}", h=8, size=14)
             pdf.ln(2)
 
-            # Kép (ha van)
-            img_url = get_image_url(ex)
+            # Kép (ha van) – Cél3-nál fix match-game kép, ha van URL
+            img_url = None
+            if stage_code == "main" and want_match_game and MATCH_GAME_IMAGE_URL:
+                img_url = MATCH_GAME_IMAGE_URL
+            else:
+                img_url = get_image_url(ex)
+
             if img_url:
                 try:
                     resp = requests.get(img_url, timeout=8)
