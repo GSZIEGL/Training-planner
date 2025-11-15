@@ -1,10 +1,8 @@
-
-
-
 import json
 import random
 import textwrap
 from typing import List, Dict, Any
+from io import BytesIO
 
 import requests
 import streamlit as st
@@ -40,10 +38,10 @@ st.markdown(
     **korosztály**, **taktikai cél**, **technikai és erőnléti fókusz** alapján.
 
     A kimenet:  
-    - 1️⃣ Bemelegítés (Warm-up)  
-    - 2️⃣ Cél1 – kis létszámú taktikai feladat (Small-sided)  
-    - 3️⃣ Cél2 – nagyobb létszámú taktikai játék  
-    - 4️⃣ Cél3 – fő rész, lehetőség szerint **mérkőzésjáték (match game)**  
+    1️⃣ Bemelegítés (Warm-up)  
+    2️⃣ Cél1 – kis létszámú taktikai feladat (Small-sided)  
+    3️⃣ Cél2 – nagyobb létszámú taktikai játék  
+    4️⃣ Cél3 – fő rész, lehetőség szerint **mérkőzésjáték (match game)**  
     """
 )
 
@@ -81,6 +79,7 @@ def get_image_url(ex: Dict[str, Any]):
 
 
 def exercise_text_blob(ex: Dict[str, Any]) -> str:
+    """Összefűzzük a title + sections + meta értékeket egy hosszú szöveggé."""
     parts = []
     parts.append(ex.get("title", ""))
     secs = ex.get("sections", {})
@@ -107,11 +106,14 @@ def matches_age(ex: Dict[str, Any], age_tokens: List[str]) -> bool:
 
 
 def is_game_like_blob(blob: str) -> bool:
+    """Mérkőzésjáték jellegű gyakorlat felismerése."""
     game_words = [
-        "game", "match", "small-sided", "possession game",
+        "game", "match", "game form", "small-sided game", "minigame",
         "7vs7", "7 vs 7", "8vs8", "8 vs 8",
         "9vs9", "9 vs 9", "10vs10", "10 vs 10",
-        "11vs11", "11 vs 11", "finishing game"
+        "11vs11", "11 vs 11",
+        "players -", "players–", "players –",
+        "team training", "game systems"
     ]
     return any(w in blob for w in game_words)
 
@@ -161,54 +163,72 @@ def score_exercise_for_stage(
             score += 2
 
     is_warm_like = any(w in blob for w in ["warm-up", "warm up", "aufwärmen", "coordination"])
-    is_main_like = any(w in blob for w in ["finishing", "goal", "6vs6", "7vs7", "8vs8", "half-field", "game"])
+    is_main_like = any(w in blob for w in ["finishing", "goal", "half-field", "half field"])
     is_game_like = is_game_like_blob(blob)
+
+    # meta-mezők külön kiemelve
+    meta = ex.get("meta", {})
+    meta_text = " ".join(str(v) for v in meta.values()).lower()
 
     if stage == "warmup":
         if is_warm_like:
-            score += 6
-        if is_main_like:
-            score -= 4
+            score += 8
+        if is_main_like or is_game_like:
+            score -= 6
 
     elif stage == "small":
         if any(w in blob for w in ["1vs1", "1 vs 1", "2vs2", "2 vs 2", "3vs3", "3 vs 3", "4vs4", "4 vs 4"]):
+            score += 6
+        if "small-sided" in blob or "small sided" in blob:
             score += 5
+        if "aufwärmen" in blob or "warm" in blob:
+            score += 2
 
     elif stage == "large":
         if any(w in blob for w in ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8"]):
-            score += 4
+            score += 6
         for kw in goal2_format_tokens:
             if kw.lower() in blob:
                 score += 4
         if any(w in blob for w in ["build-up", "build up", "possession", "keeping the ball",
                                    "game systems", "team training", "organization", "organised"]):
             score += 4
-        if any(w in blob for w in ["circuit", "course", "pure coordination"]):
-            score -= 3
+        if any(w in blob for w in ["circuit", "course"]):
+            score -= 4
         if is_warm_like:
-            score -= 3
+            score -= 4
 
     elif stage == "main":
-        # Cél3 – mérkőzésjáték preferencia
+        # Cél3 – legyen tényleg mérkőzésjáték
         if is_game_like:
-            score += 10
+            score += 20
         else:
-            score -= 8
+            score -= 15
+
+        # meta "Form of Training" + "Number of Players"
+        if "game" in meta_text or "team training" in meta_text:
+            score += 6
+        if "players" in meta_text:
+            score += 4
 
         for kw in goal3_format_tokens:
             if kw.lower() in blob:
-                score += 5
+                score += 6
 
         for kw in goal3_profile_keywords:
             if kw.lower() in blob:
-                score += 4
+                score += 5
 
-        if any(w in blob for w in ["drill", "circuit", "course", "pattern only"]):
-            score -= 4
+        # "drill", "circuit", nagyon edzés-jellegű – ne legyen Cél3
+        if any(w in blob for w in ["drill", "circuit", "course", "pattern only", "coordinative"]):
+            score -= 10
+        if is_warm_like:
+            score -= 10
 
+    # kép-duplikáció büntetése
     img = get_image_url(ex)
     if img and img in used_images:
-        score -= 50  # ugyanaz a kép erősen büntetve
+        score -= 50
 
     score += random.uniform(0, 1)
     return score
@@ -225,33 +245,35 @@ def pick_exercise_for_stage(
     goal3_format_tokens: List[str],
     goal3_profile_keywords: List[str],
     used_urls: set,
-    used_images: set
+    used_images: set,
+    require_match_game: bool = False
 ):
     candidates = [ex for ex in EX_DB if matches_age(ex, age_tokens) and ex.get("url") not in used_urls]
     if not candidates:
         return None
 
+    # Cél3 – mérkőzésjáték szűrés
     if stage == "main":
-        # először game-like szűrés
-        game_candidates = []
-        for ex in candidates:
-            blob = exercise_text_blob(ex)
-            if is_game_like_blob(blob):
-                game_candidates.append(ex)
+        blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
+        game_candidates = [ex for ex in candidates if is_game_like_blob(blob_map[id(ex)])]
 
-        if game_candidates:
+        if require_match_game and game_candidates:
             candidates = game_candidates
-        else:
-            # nincs game-like → korosztály-alapú meccs létszám
+        elif require_match_game and not game_candidates:
+            # nincs "game" jelleg, próbáljunk létszám-alapút
             fmt_tokens_age = age_based_game_tokens(age_tokens)
             if fmt_tokens_age:
                 fmt_cands = []
                 for ex in candidates:
-                    blob = exercise_text_blob(ex)
+                    blob = blob_map[id(ex)]
                     if any(tok.lower() in blob for tok in fmt_tokens_age):
                         fmt_cands.append(ex)
                 if fmt_cands:
                     candidates = fmt_cands
+        else:
+            # nem kötelező meccsjáték – de ha van game-like, előnyben
+            if game_candidates:
+                candidates = game_candidates
 
     scored = [
         (
@@ -394,7 +416,9 @@ if want_match_game:
         goal3_format_tokens = ["11vs11", "11 vs 11", "full pitch", "match"]
     else:
         # korosztály szerinti meccsformátum
-        goal3_format_tokens = age_based_game_tokens(age_tokens)
+        tokens_age = age_based_game_tokens(age_tokens)
+        if tokens_age:
+            goal3_format_tokens = tokens_age
 
 # ====== GOMB: EDZÉSTERV GENERÁLÁSA ======
 generate = st.sidebar.button("Edzésterv generálása")
@@ -425,7 +449,8 @@ for label, code in stages:
         goal3_format_tokens,
         goal3_profile_keywords,
         used_urls,
-        used_images
+        used_images,
+        require_match_game=(code == "main" and want_match_game)
     )
     if ex:
         plan.append((label, ex))
@@ -460,7 +485,6 @@ if not plan:
 for idx, (stage_label, ex) in enumerate(plan, start=1):
     st.markdown(f"### {idx}. {stage_label}")
     title = ex.get("title", "Névtelen gyakorlat")
-    url = ex.get("url")
 
     c1, c2 = st.columns([1.2, 2])
 
@@ -476,8 +500,6 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
 
     with c2:
         st.markdown(f"**EN title:** {title}")
-        if url:
-            st.markdown(f"[🔗 Megnyitás böngészőben]({url})")
 
         sections = ex.get("sections", {})
         org = sections.get("Organisation") or sections.get("Organization")
@@ -529,4 +551,209 @@ for idx, (stage_label, ex) in enumerate(plan, start=1):
     st.markdown("---")
 
 st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
-st.caption("Következő lépés: ha szeretnéd, ide be tudjuk építeni a PDF-generálót is, letölthető edzésterv formában.")
+
+
+# ====== PDF-GENERÁLÓ (EN+HU, NINCS FORRÁS-LINK) ======
+from fpdf import FPDF
+
+
+def safe_wrap(text: str, width: int = 110) -> str:
+    """Hosszú szavakra is felkészülő tördelés."""
+    if not text:
+        return ""
+    words = text.split()
+    processed = []
+    for w in words:
+        if len(w) > width:
+            # ha túl hosszú egy "szó", daraboljuk
+            chunks = [w[i:i + width] for i in range(0, len(w), width)]
+            processed.extend(chunks)
+        else:
+            processed.append(w)
+    wrapped = textwrap.wrap(" ".join(processed), width=width)
+    return "\n".join(wrapped)
+
+
+class TrainingPDF(FPDF):
+    def __init__(self):
+        super().__init__(orientation="P", unit="mm", format="A4")
+        # Auto page break
+        self.set_auto_page_break(auto=True, margin=15)
+        # Unicode font (DejaVuSans.ttf legyen a repo gyökerében)
+        self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+        self.set_font("DejaVu", size=11)
+
+    def header(self):
+        # Lila header sáv + cím
+        self.set_fill_color(220, 210, 240)  # enyhe lila
+        self.rect(0, 0, 210, 18, "F")
+        self.set_xy(10, 5)
+        self.set_font("DejaVu", size=10)
+        self.cell(0, 5, "chatbotfootball training planner", ln=1)
+        self.set_x(10)
+        self.set_font("DejaVu", size=9)
+        self.cell(0, 4, "Bilingual training session – Kéttannyelvű edzésterv", ln=1)
+        self.ln(2)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("DejaVu", size=8)
+        self.set_text_color(120, 120, 120)
+        self.cell(0, 5, f"Page {self.page_no()}", align="C")
+
+
+def build_pdf(
+    plan: List,
+    age_label: str,
+    players_raw: str,
+    total_time: str,
+    tact_label: str,
+    tech_selection: List[str],
+    phys_label: str,
+    want_match_game: bool
+) -> BytesIO:
+    pdf = TrainingPDF()
+
+    # ===== CÍMOLDAL =====
+    pdf.add_page()
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(15)
+
+    pdf.set_font("DejaVu", size=18)
+    pdf.cell(0, 10, "Edzésterv / Training Plan", ln=1)
+    pdf.ln(4)
+
+    pdf.set_font("DejaVu", size=11)
+    pdf.cell(0, 6, f"Korosztály / Age group: {age_label}", ln=1)
+    pdf.cell(0, 6, f"Játékoslétszám / Number of players: {players_raw}", ln=1)
+    pdf.cell(0, 6, f"Össz edzésidő / Total duration: {total_time}", ln=1)
+    pdf.ln(4)
+    pdf.cell(0, 6, f"Taktikai cél / Tactical goal: {tact_label}", ln=1)
+    pdf.cell(
+        0, 6,
+        f"Technikai fókusz / Technical focus: {', '.join(tech_selection) if tech_selection else 'nincs megadva'}",
+        ln=1,
+    )
+    pdf.cell(0, 6, f"Erőnléti fókusz / Physical focus: {phys_label}", ln=1)
+    pdf.cell(0, 6, f"Cél3 mérkőzésjáték / Match game on main phase: {'Igen/Yes' if want_match_game else 'Nem/No'}", ln=1)
+
+    pdf.ln(10)
+    pdf.set_font("DejaVu", size=11)
+    intro = (
+        "Az edzésterv 4 blokkból áll: bemelegítés, kis létszámú játék, nagyobb létszámú taktikai játék "
+        "és egy fő mérkőzésjáték jellegű feladat. A gyakorlatok angol leíráshoz gépi magyar fordítást is tartalmaznak."
+    )
+    pdf.multi_cell(0, 5, safe_wrap(intro), align="L")
+
+    # ===== GYAKORLATOK =====
+    for idx, (stage_label, ex) in enumerate(plan, start=1):
+        pdf.add_page()
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("DejaVu", size=14)
+        pdf.cell(0, 8, f"{idx}. {stage_label}", ln=1)
+        pdf.ln(2)
+
+        title = ex.get("title", "Névtelen gyakorlat")
+        pdf.set_font("DejaVu", size=12)
+        pdf.multi_cell(0, 6, safe_wrap(f"EN: {title}"), align="L")
+        hu_title = en_to_hu(title)
+        if hu_title:
+            pdf.set_font("DejaVu", size=11)
+            pdf.multi_cell(0, 5, safe_wrap(f"HU: {hu_title}"), align="L")
+
+        pdf.ln(4)
+
+        # Organisation / Szervezés
+        sections = ex.get("sections", {})
+        org = sections.get("Organisation") or sections.get("Organization")
+        proc = sections.get("Process")
+        tip = sections.get("Tip")
+
+        if org:
+            pdf.set_font("DejaVu", size=11)
+            pdf.set_text_color(60, 0, 90)  # kicsit lilás
+            pdf.cell(0, 7, "Organisation / Szervezés", ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("DejaVu", size=10)
+            pdf.multi_cell(0, 5, safe_wrap("EN: " + org), align="L")
+            hu_org = en_to_hu(org)
+            if hu_org:
+                pdf.ln(2)
+                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_org), align="L")
+            pdf.ln(3)
+
+        # Process / Leírás
+        if proc:
+            pdf.set_font("DejaVu", size=11)
+            pdf.set_text_color(60, 0, 90)
+            pdf.cell(0, 7, "Process / Leírás", ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("DejaVu", size=10)
+            pdf.multi_cell(0, 5, safe_wrap("EN: " + proc), align="L")
+            hu_proc = en_to_hu(proc)
+            if hu_proc:
+                pdf.ln(2)
+                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_proc), align="L")
+            pdf.ln(3)
+
+            # Coaching points – EN bullet lista
+            pdf.set_font("DejaVu", size=11)
+            pdf.set_text_color(60, 0, 90)
+            pdf.cell(0, 7, "Coaching points (EN)", ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("DejaVu", size=10)
+            sentences = [s.strip() for s in proc.replace("\n", " ").split(".") if s.strip()]
+            for s in sentences:
+                bullet_line = "• " + s
+                pdf.multi_cell(0, 5, safe_wrap(bullet_line), align="L")
+            pdf.ln(3)
+
+        # Tip / Megjegyzés
+        if tip:
+            pdf.set_font("DejaVu", size=11)
+            pdf.set_text_color(60, 0, 90)
+            pdf.cell(0, 7, "Tip / Megjegyzés", ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("DejaVu", size=10)
+            pdf.multi_cell(0, 5, safe_wrap("EN: " + tip), align="L")
+            hu_tip = en_to_hu(tip)
+            if hu_tip:
+                pdf.ln(2)
+                pdf.multi_cell(0, 5, safe_wrap("HU: " + hu_tip), align="L")
+            pdf.ln(3)
+
+        # 🔴 Eredeti URL-t szándékosan NEM írjuk ki, sem linkként, sem szövegként.
+
+    # Visszaadjuk BytesIO-ként
+    pdf_buffer = BytesIO()
+    pdf_output = pdf.output(dest="S").encode("latin1", "ignore")
+    pdf_buffer.write(pdf_output)
+    pdf_buffer.seek(0)
+    return pdf_buffer
+
+
+# ====== PDF LETÖLTÉS GOMB ======
+st.markdown("### 📄 PDF export")
+
+if st.button("Letölthető két nyelvű PDF edzésterv generálása"):
+    try:
+        pdf_bytes = build_pdf(
+            plan=plan,
+            age_label=age_label,
+            players_raw=players_raw,
+            total_time=total_time,
+            tact_label=tact_label,
+            tech_selection=tech_selection,
+            phys_label=phys_label,
+            want_match_game=want_match_game,
+        )
+        st.download_button(
+            label="📥 PDF letöltése",
+            data=pdf_bytes,
+            file_name="edzesterv_ketnyelvu.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"PDF generálási hiba: {e}")
+else:
+    st.caption("Nyomd meg a gombot a két nyelvű PDF edzéstervhez.")
