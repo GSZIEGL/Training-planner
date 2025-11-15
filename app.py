@@ -11,7 +11,7 @@ import streamlit as st
 # ====== IDE ÍRD BE A SAJÁT MECCSJÁTÉK KÉPED URL-JÉT ======
 # Pl. ha a GitHubon a repo gyökerébe feltöltöd "match_game.png" néven:
 # MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
-MATCH_GAME_IMAGE_URL = ""https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png""  # <-- EZT CSERÉLD LE
+MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"  # <-- EZT CSERÉLD LE
 
 
 # ====== Opcionális fordító EN -> HU ======
