@@ -8,10 +8,8 @@ import tempfile
 import requests
 import streamlit as st
 
-# ====== IDE ÍRD BE A SAJÁT MECCSJÁTÉK KÉPED URL-JÉT ======
-# Pl. ha a GitHubon a repo gyökerébe feltöltöd "match_game.png" néven:
-# MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
-MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"  # <-- EZT CSERÉLD LE
+# ====== FIX MECCSJÁTÉK KÉP CÉL3-HOZ, HA BE VAN PIPÁLVA A MÉRKŐZÉSJÁTÉK ======
+MATCH_GAME_IMAGE_URL = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
 
 
 # ====== Opcionális fordító EN -> HU ======
@@ -100,12 +98,13 @@ except Exception as e:
 st.sidebar.success(f"✅ Betöltött gyakorlatok száma: {len(EX_DB)}")
 
 # ====== EDDIG HASZNÁLT GYAKORLATOK TÁROLÁSA SESSION_STATE-BEN ======
-if "used_urls_history" not in st.session_state:
-    st.session_state["used_urls_history"] = []
+# dict: {exercise_id: használatszám}
+if "used_ex_history" not in st.session_state:
+    st.session_state["used_ex_history"] = {}
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🔁 Gyakorlat-história törlése (újrakezdés)"):
-    st.session_state["used_urls_history"] = []
+    st.session_state["used_ex_history"] = {}
     st.sidebar.success("A korábban használt gyakorlatok törölve. Új generálásnál újra felhasználhatók.")
 
 
@@ -125,11 +124,13 @@ def exercise_text_blob(ex: Dict[str, Any]) -> str:
     parts = []
     parts.append(ex.get("title", ""))
     secs = ex.get("sections", {})
-    for v in secs.values():
-        parts.append(v or "")
+    if isinstance(secs, dict):
+        for v in secs.values():
+            parts.append(v or "")
     meta = ex.get("meta", {})
-    for v in meta.values():
-        parts.append(v or "")
+    if isinstance(meta, dict):
+        for v in meta.values():
+            parts.append(v or "")
     return " ".join(parts).lower()
 
 
@@ -138,9 +139,10 @@ def matches_age(ex: Dict[str, Any], age_tokens: List[str]) -> bool:
         return True
     age_text = ""
     meta = ex.get("meta", {})
-    for k, v in meta.items():
-        if "age" in k.lower():
-            age_text += " " + str(v)
+    if isinstance(meta, dict):
+        for k, v in meta.items():
+            if "age" in k.lower():
+                age_text += " " + str(v)
     if not age_text:
         return True
     age_text = age_text.lower()
@@ -175,6 +177,22 @@ def age_based_game_tokens(age_tokens_list: List[str]) -> List[str]:
     return []
 
 
+def get_ex_id(ex: Dict[str, Any]) -> str:
+    """
+    Egyedi azonosító gyakorlathoz: URL ha van, különben title+Organisation hash.
+    Így akkor is tudjuk trackelni, ha nincs URL mező.
+    """
+    if ex.get("url"):
+        return f"url::{ex['url']}"
+    title = ex.get("title", "no_title")
+    org = ""
+    secs = ex.get("sections", {})
+    if isinstance(secs, dict):
+        org = secs.get("Organisation") or secs.get("Organization") or ""
+    base = f"{title}||{org}"
+    return "id::" + str(abs(hash(base)))
+
+
 def score_exercise_for_stage(
     ex: Dict[str, Any],
     stage: str,
@@ -184,10 +202,26 @@ def score_exercise_for_stage(
     goal2_format_tokens: List[str],
     goal3_format_tokens: List[str],
     goal3_profile_keywords: List[str],
-    used_images: set
+    used_images: set,
+    usage_counts: Dict[str, int],
+    prev_blob: str = ""
 ) -> float:
     blob = exercise_text_blob(ex)
     score = 0.0
+
+    ex_id = get_ex_id(ex)
+    used_n = usage_counts.get(ex_id, 0)
+
+    # --- Téma-folytonosság: hasonlóság az előző gyakorlattal ---
+    if prev_blob:
+        all_keys = tact_keywords + tech_keywords + phys_keywords
+        overlap = 0
+        for kw in all_keys:
+            kw_l = kw.lower()
+            if kw_l in blob and kw_l in prev_blob:
+                overlap += 1
+        if stage in ("small", "large", "main"):
+            score += overlap * 2
 
     # taktikai
     for kw in tact_keywords:
@@ -210,7 +244,10 @@ def score_exercise_for_stage(
 
     # meta-mezők külön kiemelve
     meta = ex.get("meta", {})
-    meta_text = " ".join(str(v) for v in meta.values()).lower()
+    if isinstance(meta, dict):
+        meta_text = " ".join(str(v) for v in meta.values()).lower()
+    else:
+        meta_text = ""
 
     if stage == "warmup":
         if is_warm_like:
@@ -227,7 +264,6 @@ def score_exercise_for_stage(
             score += 2
 
     elif stage == "large":
-        # támogatjuk a nagyobb létszámot
         has_large_tokens = ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8", "9vs9", "9 vs 9"]
         if any(w in blob for w in has_large_tokens):
             score += 6
@@ -274,6 +310,10 @@ def score_exercise_for_stage(
     if img and img in used_images:
         score -= 50
 
+    # használtság büntetése: minél többször használtuk, annál lejjebb csúszik
+    score -= used_n * 3
+
+    # kis random zaj, hogy ne mindig ugyanazt válassza
     score += random.uniform(0, 1)
     return score
 
@@ -288,39 +328,68 @@ def pick_exercise_for_stage(
     goal2_format_tokens: List[str],
     goal3_format_tokens: List[str],
     goal3_profile_keywords: List[str],
-    used_urls: set,
+    used_ids: set,
     used_images: set,
-    global_used_urls: set = None,
+    global_used_ids: set = None,
+    usage_counts: Dict[str, int] = None,
+    prev_blob: str = "",
     require_match_game: bool = False
 ):
     """
-    used_urls: az aktuális edzésterven belül már kiválasztott gyakorlatok
-    global_used_urls: előző edzéstervekben már használt gyakorlatok (session_state)
+    used_ids: az aktuális edzésterven belül már kiválasztott gyakorlatok (duplikát elkerülése 1 edzésen belül)
+    global_used_ids: előző edzéstervekben már használt gyakorlatok (session state)
+    usage_counts: {exercise_id: használatszám}
     """
-    if global_used_urls is None:
-        global_used_urls = set()
+    if global_used_ids is None:
+        global_used_ids = set()
+    if usage_counts is None:
+        usage_counts = {}
 
     # 1) Próbáljunk olyan gyakorlatokat, amik se a mostani tervben, se globálisan nem szerepeltek
-    candidates = [
-        ex for ex in EX_DB
-        if matches_age(ex, age_tokens)
-        and ex.get("url") not in used_urls
-        and ex.get("url") not in global_used_urls
-    ]
+    candidates = []
+    for ex in EX_DB:
+        if not matches_age(ex, age_tokens):
+            continue
+        ex_id = get_ex_id(ex)
+        if ex_id in used_ids:
+            continue
+        if ex_id in global_used_ids:
+            continue
+        candidates.append(ex)
 
     # 2) Ha így semmi, engedjük vissza a globálisan használtakat, csak az aktuális edzés duplikátjait tiltjuk
     if not candidates:
-        candidates = [
-            ex for ex in EX_DB
-            if matches_age(ex, age_tokens)
-            and ex.get("url") not in used_urls
-        ]
+        for ex in EX_DB:
+            if not matches_age(ex, age_tokens):
+                continue
+            ex_id = get_ex_id(ex)
+            if ex_id in used_ids:
+                continue
+            candidates.append(ex)
         if not candidates:
             return None
 
+    # --- Taktikai szűrés elsőnek ---
+    blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
+    tact_filtered = [
+        ex for ex in candidates
+        if any(kw.lower() in blob_map[id(ex)] for kw in tact_keywords)
+    ]
+    # ha elég sok taktikai találat van, csak ezekkel megyünk tovább
+    if len(tact_filtered) >= 15:
+        candidates = tact_filtered
+        blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
+
+    # Cél2 – preferáljuk a nagyobb létszámot (5v5+), ha van
+    if stage == "large":
+        large_tokens = ["5vs5", "5 vs 5", "6vs6", "6 vs 6", "7vs7", "7 vs 7", "8vs8", "8 vs 8", "9vs9", "9 vs 9"]
+        large_cands = [ex for ex in candidates if any(tok in blob_map[id(ex)] for tok in large_tokens)]
+        if large_cands:
+            candidates = large_cands
+            blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
+
     # ===== Cél3 – külön logika a formátum preferenciára + mérkőzésjátékra =====
     if stage == "main":
-        blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
         game_candidates = [ex for ex in candidates if is_game_like_blob(blob_map[id(ex)])]
 
         if require_match_game:
@@ -347,26 +416,28 @@ def pick_exercise_for_stage(
 
             if preferred:
                 candidates = preferred
+                blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
             # ha preferred üres, marad az eredeti candidates (nagyon végső fallback)
 
         else:
             # Nem kötelező meccsjáték, de ha vannak game-like jellegűek, azokat preferáljuk
             if game_candidates:
                 candidates = game_candidates
+                blob_map = {id(ex): exercise_text_blob(ex) for ex in candidates}
 
     # ===== PONTOSZÁM ALAPÚ VÁLASZTÁS =====
-    scored = [
-        (
-            score_exercise_for_stage(
-                ex, stage,
-                tact_keywords, tech_keywords, phys_keywords,
-                goal2_format_tokens, goal3_format_tokens, goal3_profile_keywords,
-                used_images
-            ),
-            ex
+    scored = []
+    for ex in candidates:
+        sc = score_exercise_for_stage(
+            ex, stage,
+            tact_keywords, tech_keywords, phys_keywords,
+            goal2_format_tokens, goal3_format_tokens, goal3_profile_keywords,
+            used_images,
+            usage_counts,
+            prev_blob
         )
-        for ex in candidates
-    ]
+        scored.append((sc, ex))
+
     scored.sort(key=lambda x: x[0], reverse=True)
     best_score, best_ex = scored[0]
     if best_score <= 0:
@@ -508,7 +579,7 @@ if not generate:
     st.stop()
 
 # ====== EDZÉSTERV ÖSSZERAKÁSA ======
-used_urls = set()
+used_ids = set()
 used_images = set()
 plan = []
 stages = [
@@ -517,6 +588,8 @@ stages = [
     ("Cél2 – nagyobb létszámú taktikai játék / Larger tactical game", "large"),
     ("Cél3 – fő rész – mérkőzésjáték / Main phase – Match game", "main")
 ]
+
+prev_blob_for_stage = ""  # előző gyakorlat szövege a láncolt logikához
 
 for label, code in stages:
     ex = pick_exercise_for_stage(
@@ -528,25 +601,28 @@ for label, code in stages:
         goal2_format_tokens,
         goal3_format_tokens,
         goal3_profile_keywords,
-        used_urls,
+        used_ids,
         used_images,
-        global_used_urls=set(st.session_state["used_urls_history"]),
+        global_used_ids=set(st.session_state["used_ex_history"].keys()),
+        usage_counts=st.session_state["used_ex_history"],
+        prev_blob=prev_blob_for_stage,
         require_match_game=(code == "main" and want_match_game)
     )
     if ex:
         plan.append((label, code, ex))
-        used_urls.add(ex.get("url"))
+        ex_id = get_ex_id(ex)
+        used_ids.add(ex_id)
+        prev_blob_for_stage = exercise_text_blob(ex)
         img = get_image_url(ex)
         if img:
             used_images.add(img)
     else:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
 
-# Új gyakorlatok URL-jeinek hozzáadása a globális történethez
+# Új gyakorlatok használatszámának növelése
 for _, _, ex in plan:
-    url = ex.get("url")
-    if url and url not in st.session_state["used_urls_history"]:
-        st.session_state["used_urls_history"].append(url)
+    ex_id = get_ex_id(ex)
+    st.session_state["used_ex_history"][ex_id] = st.session_state["used_ex_history"].get(ex_id, 0) + 1
 
 st.subheader("📋 Edzésterv összefoglaló")
 
@@ -596,9 +672,9 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
             st.markdown(f"**HU cím (gépi fordítás):** {hu_title}")
 
         sections = ex.get("sections", {})
-        org = sections.get("Organisation") or sections.get("Organization")
-        proc = sections.get("Process")
-        tip = sections.get("Tip")
+        org = sections.get("Organisation") or sections.get("Organization") if isinstance(sections, dict) else None
+        proc = sections.get("Process") if isinstance(sections, dict) else None
+        tip = sections.get("Tip") if isinstance(sections, dict) else None
 
         if org:
             with st.expander("Organisation (EN) / Szervezés (HU)"):
@@ -745,7 +821,7 @@ if HAS_FPDF:
             mc(pdf, f"{idx}. {stage_label}", h=8, size=14)
             pdf.ln(2)
 
-            # Kép (ha van) – Cél3-nál MINDIG a fix match-game kép
+            # Kép (ha van) – Cél3-nál MINDIG a fix match-game kép, ha be van pipálva
             if stage_code == "main" and want_match_game:
                 img_url = MATCH_GAME_IMAGE_URL
             else:
@@ -775,9 +851,9 @@ if HAS_FPDF:
             pdf.ln(3)
 
             sections = ex.get("sections", {})
-            org = sections.get("Organisation") or sections.get("Organization")
-            proc = sections.get("Process")
-            tip = sections.get("Tip")
+            org = sections.get("Organisation") or sections.get("Organization") if isinstance(sections, dict) else None
+            proc = sections.get("Process") if isinstance(sections, dict) else None
+            tip = sections.get("Tip") if isinstance(sections, dict) else None
 
             # Organisation
             if org:
