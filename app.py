@@ -8,6 +8,7 @@ import streamlit as st
 
 from fpdf import FPDF
 import tempfile
+import textwrap
 
 # ============================================================
 # STREAMLIT ALAPBEÁLLÍTÁS
@@ -40,7 +41,7 @@ st.markdown(
 st.sidebar.header("1. Adatbázis forrása")
 
 use_builtin = st.sidebar.checkbox(
-    "Beépített 300 gyakorlatos adatbázis használata (`training_DATABASE.json`)",
+    "Beépített 300 gyakorlatos adatbázis használata (`training_database.json`)",
     value=True
 )
 
@@ -73,15 +74,6 @@ if not EX_DB:
 # SEGÉDFÜGGVÉNYEK AZ ÚJ ADATSZERKEZETHEZ
 # ============================================================
 
-def get_unique_values(field: str) -> List[str]:
-    vals = []
-    for ex in EX_DB:
-        v = ex.get(field)
-        if v and v not in vals:
-            vals.append(v)
-    return vals
-
-
 def filter_by_age(ex_list: List[Dict[str, Any]], age_code: Optional[str]) -> List[Dict[str, Any]]:
     if not age_code:
         return ex_list
@@ -101,7 +93,6 @@ def filter_by_tech(ex_list: List[Dict[str, Any]], tech_codes: List[str]) -> List
 
 
 def get_image_url(ex: Dict[str, Any]) -> Optional[str]:
-    """Visszaadja a gyakorlat kép-URL-jét, ha van. Különben None."""
     url = ex.get("image_url")
     if url:
         return url
@@ -209,10 +200,6 @@ def exercise_type_score(ex_type: str, stage: str) -> int:
 
 
 def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
-    """
-    Összpontszám egy gyakorlatra adott blokkhoz (warmup/small/large/main).
-    Csak az új adatszerkezet mezőit használja.
-    """
     fmt = ex.get("format", "")
     ex_type = ex.get("exercise_type", "")
     intensity = ex.get("intensity", "")
@@ -240,16 +227,24 @@ def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
 
 def pick_exercise_for_stage(
     ex_list: List[Dict[str, Any]],
-    stage: str
+    stage: str,
+    used_keys: set
 ) -> Optional[Dict[str, Any]]:
     """
-    Kiválasztja a legjobb gyakorlatot az adott szakaszra.
-    NINCS id alapú kizárás – a hívó félnek kell eltávolítani a már választott gyakorlatot a listából.
+    ex_list: jelöltek az adott szakaszra (korosztály/taktika/technika alapján).
+    used_keys: már használt (cím, formátum) párosok – ezeket kizárjuk.
     """
-    if not ex_list:
+    # szűrés a már használtakra
+    candidates = []
+    for ex in ex_list:
+        key = (ex.get("title_hu", ""), ex.get("format", ""))
+        if key not in used_keys:
+            candidates.append(ex)
+
+    if not candidates:
         return None
 
-    scored = [(score_exercise_for_stage(ex, stage), ex) for ex in ex_list]
+    scored = [(score_exercise_for_stage(ex, stage), ex) for ex in candidates]
     scored.sort(key=lambda x: x[0], reverse=True)
 
     best_score, best_ex = scored[0]
@@ -336,21 +331,46 @@ if not generate:
     st.stop()
 
 # ============================================================
-# EDZÉSTERV ÖSSZERAKÁSA AZ ÚJ ADATBÁZISBÓL
+# EDZÉSTERV ÖSSZERAKÁSA – FOKOZATOSAN LAZÍTOTT SZŰRÉS + DUPLIKÁCIÓ TILTÁSA
 # ============================================================
 
-filtered = EX_DB
-filtered = filter_by_age(filtered, selected_age_code)
-filtered = filter_by_tact(filtered, selected_tact_code)
-filtered = filter_by_tech(filtered, selected_tech_codes)
+def candidates_for_stage(stage: str, used_keys: set) -> Optional[Dict[str, Any]]:
+    """
+    Fokozatosan lazítjuk a szűrést:
+    1) age + tact + tech
+    2) age + tact
+    3) age only
+    4) bármi az adatbázisból
+    Mindegyiknél kizárjuk a már használt (cím, formátum) párosokat.
+    """
+    # 1. age + tact + tech
+    cand = EX_DB
+    cand = filter_by_age(cand, selected_age_code)
+    cand = filter_by_tact(cand, selected_tact_code)
+    cand = filter_by_tech(cand, selected_tech_codes)
+    ex = pick_exercise_for_stage(cand, stage, used_keys)
+    if ex:
+        return ex
 
-if not filtered:
-    st.error("❌ A megadott szűrőkkel nem találtam gyakorlatot. Próbálj lazább szűrést (pl. 'Bármely' taktikára / technikára).")
-    st.stop()
+    # 2. age + tact
+    cand = EX_DB
+    cand = filter_by_age(cand, selected_age_code)
+    cand = filter_by_tact(cand, selected_tact_code)
+    ex = pick_exercise_for_stage(cand, stage, used_keys)
+    if ex:
+        return ex
 
-# dolgozzunk egy másolaton, amiből kiszedjük a már kiválasztott gyakorlatokat
-available = filtered.copy()
+    # 3. csak age
+    cand = filter_by_age(EX_DB, selected_age_code)
+    ex = pick_exercise_for_stage(cand, stage, used_keys)
+    if ex:
+        return ex
 
+    # 4. teljes adatbázis
+    ex = pick_exercise_for_stage(EX_DB, stage, used_keys)
+    return ex
+
+used_keys = set()
 plan: List[Dict[str, Any]] = []
 stages = [
     ("Bemelegítés", "warmup"),
@@ -360,19 +380,16 @@ stages = [
 ]
 
 for label, code in stages:
-    ex = pick_exercise_for_stage(available, code)
+    ex = candidates_for_stage(code, used_keys)
     if ex:
         plan.append((label, code, ex))
-        # távolítsuk el az available listából, hogy ne jöhessen vissza ugyanaz
-        try:
-            available.remove(ex)
-        except ValueError:
-            pass
+        key = (ex.get("title_hu", ""), ex.get("format", ""))
+        used_keys.add(key)
     else:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
 
 if not plan:
-    st.error("Nem sikerült gyakorlatokat választani az edzéshez. Lazíts a szűréseken.")
+    st.error("Nem sikerült gyakorlatokat választani az edzéshez.")
     st.stop()
 
 # ============================================================
@@ -451,8 +468,24 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
 st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
 
 # ============================================================
-# PDF GENERÁLÁS – MAGYAR MEZŐK + KÉP
+# PDF GENERÁLÁS – SAFE WRAP + KÉP
 # ============================================================
+
+def safe_wrap(text: str, width: int = 110) -> str:
+    """Túl hosszú szavakat is feldarabol, hogy a PDF ne dobjon hibát."""
+    if not text:
+        return ""
+    words = text.split()
+    processed = []
+    for w in words:
+        if len(w) > width:
+            chunks = [w[i:i + width] for i in range(0, len(w), width)]
+            processed.extend(chunks)
+        else:
+            processed.append(w)
+    wrapped = textwrap.wrap(" ".join(processed), width=width)
+    return "\n".join(wrapped)
+
 
 class TrainingPDF(FPDF):
     def __init__(self):
@@ -522,7 +555,7 @@ def build_pdf(
         "és egy meccsjáték jellegű fő rész. A gyakorlatok magyar leírást, coaching pontokat és variációkat tartalmaznak."
     )
     pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(0, 5, intro, align="L")
+    pdf.multi_cell(0, 5, safe_wrap(intro), align="L")
 
     for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
         pdf.add_page()
@@ -539,10 +572,10 @@ def build_pdf(
         intensity = ex.get("intensity", "")
 
         pdf.set_font("Helvetica", size=12)
-        pdf.multi_cell(0, 6, f"Cím: {title}", align="L")
+        pdf.multi_cell(0, 6, safe_wrap(f"Cím: {title}", width=110), align="L")
         pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 5, f"Formátum: {fmt}   |   Típus: {ex_type}", align="L")
-        pdf.multi_cell(0, 5, f"Pályaméret: {pitch}   |   Időtartam: {dur} perc   |   Intenzitás: {intensity}", align="L")
+        pdf.multi_cell(0, 5, safe_wrap(f"Formátum: {fmt}   |   Típus: {ex_type}", width=110), align="L")
+        pdf.multi_cell(0, 5, safe_wrap(f"Pályaméret: {pitch}   |   Időtartam: {dur} perc   |   Intenzitás: {intensity}", width=110), align="L")
         pdf.ln(3)
 
         img_url = get_image_url(ex)
@@ -565,7 +598,7 @@ def build_pdf(
             pdf.cell(0, 7, "Szervezés", ln=1)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", size=10)
-            pdf.multi_cell(0, 5, org, align="L")
+            pdf.multi_cell(0, 5, safe_wrap(org), align="L")
             pdf.ln(2)
 
         desc = ex.get("description_hu")
@@ -575,7 +608,7 @@ def build_pdf(
             pdf.cell(0, 7, "Leírás / menete", ln=1)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", size=10)
-            pdf.multi_cell(0, 5, desc, align="L")
+            pdf.multi_cell(0, 5, safe_wrap(desc), align="L")
             pdf.ln(2)
 
         cps = ex.get("coaching_points_hu") or []
@@ -586,7 +619,7 @@ def build_pdf(
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", size=10)
             for p in cps:
-                pdf.multi_cell(0, 5, f"• {p}", align="L")
+                pdf.multi_cell(0, 5, safe_wrap(f"• {p}"), align="L")
             pdf.ln(2)
 
         vars_ = ex.get("variations_hu") or []
@@ -597,7 +630,7 @@ def build_pdf(
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", size=10)
             for v in vars_:
-                pdf.multi_cell(0, 5, f"- {v}", align="L")
+                pdf.multi_cell(0, 5, safe_wrap(f"- {v}"), align="L")
             pdf.ln(2)
 
         prog = ex.get("progression_hu")
@@ -607,7 +640,7 @@ def build_pdf(
             pdf.cell(0, 7, "Progresszió", ln=1)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", size=10)
-            pdf.multi_cell(0, 5, prog, align="L")
+            pdf.multi_cell(0, 5, safe_wrap(prog), align="L")
             pdf.ln(2)
 
     pdf_bytes_raw = pdf.output(dest="S")
