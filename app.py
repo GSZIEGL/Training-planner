@@ -81,18 +81,6 @@ def filter_by_age(ex_list: List[Dict[str, Any]], age_code: Optional[str]) -> Lis
     return [ex for ex in ex_list if ex.get("age_group_code") == age_code]
 
 
-def filter_by_tact(ex_list: List[Dict[str, Any]], tact_code: Optional[str]) -> List[Dict[str, Any]]:
-    if not tact_code:
-        return ex_list
-    return [ex for ex in ex_list if ex.get("tactical_code") == tact_code]
-
-
-def filter_by_tech(ex_list: List[Dict[str, Any]], tech_codes: List[str]) -> List[Dict[str, Any]]:
-    if not tech_codes:
-        return ex_list
-    return [ex for ex in ex_list if ex.get("technical_code") in tech_codes]
-
-
 def get_image_url(ex: Dict[str, Any]) -> Optional[str]:
     url = ex.get("image_url")
     if url:
@@ -106,11 +94,10 @@ PLACEHOLDER_IMAGE = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/
 def normalized_key(ex: Dict[str, Any]) -> tuple:
     """
     Azonos gyakorlat külön variációi (pl. #1, #2) ugyanazt a kulcsot kapják.
-    Levágjuk a cím végéről a zárójeles részt, pl. "(Felnőtt, #2)".
+    Levágjuk a cím végéről a zárójeles részt, pl. \"(Felnőtt, #2)\".
     """
     title = ex.get("title_hu", "") or ""
     fmt = ex.get("format", "") or ""
-    # minden zárójelben lévő rész (a végéről) törölve
     title_clean = re.sub(r"\s*\([^)]*#\d+[^)]*\)\s*$", "", title).strip().lower()
     return (title_clean, fmt.strip().lower())
 
@@ -193,7 +180,7 @@ def exercise_type_score(ex_type: str, stage: str) -> int:
             score += 5
 
     elif stage == "main":
-        if "game" in t or "pressing game" in t or "transition game" in t:
+        if "game" in t or "pressing game" in t or "transition game" in t or "match" in t:
             score += 6
         if "rondó" in t or "rondo" in t:
             score -= 2
@@ -201,13 +188,32 @@ def exercise_type_score(ex_type: str, stage: str) -> int:
     return score
 
 
-def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
+def score_exercise_for_stage(ex: Dict[str, Any], stage: str,
+                             selected_tact_code: Optional[str],
+                             selected_tech_codes: List[str]) -> float:
     fmt = ex.get("format", "")
     ex_type = ex.get("exercise_type", "")
     intensity = ex.get("intensity", "")
 
     score = 0.0
 
+    # 1) Taktikai illeszkedés
+    tact_code = ex.get("tactical_code")
+    if selected_tact_code:
+        if tact_code == selected_tact_code:
+            score += 8
+        elif tact_code:
+            score += 2
+
+    # 2) Technikai illeszkedés
+    tech_code = ex.get("technical_code")
+    if selected_tech_codes:
+        if tech_code in selected_tech_codes:
+            score += 4
+        elif tech_code:
+            score += 1
+
+    # 3) Méret, intenzitás, típus – blokk-specifikus
     if stage == "warmup":
         score += format_size_score(fmt, "small")
         score += intensity_score(intensity, "low")
@@ -229,10 +235,12 @@ def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
 def pick_exercise_for_stage(
     ex_list: List[Dict[str, Any]],
     stage: str,
-    used_keys: set
+    used_keys: set,
+    selected_tact_code: Optional[str],
+    selected_tech_codes: List[str]
 ) -> Optional[Dict[str, Any]]:
     """
-    ex_list: jelöltek az adott szakaszra (korosztály/taktika/technika alapján).
+    ex_list: jelöltek korosztály alapján.
     used_keys: már használt normalizált kulcsok (cím_clean, formátum).
     """
     candidates = []
@@ -244,12 +252,19 @@ def pick_exercise_for_stage(
     if not candidates:
         return None
 
-    scored = [(score_exercise_for_stage(ex, stage), ex) for ex in candidates]
+    scored = [
+        (score_exercise_for_stage(ex, stage, selected_tact_code, selected_tech_codes), ex)
+        for ex in candidates
+    ]
     scored.sort(key=lambda x: x[0], reverse=True)
 
     best_score, best_ex = scored[0]
-    if best_score < 1 and len(scored) >= 3:
-        return random.choice([ex for _, ex in scored[:3]])
+    # ha nagyon szoros az élmezőny, random válasszunk a top 3-ból
+    if len(scored) >= 3:
+        top3 = scored[:3]
+        # ha a három pontszám közel van egymáshoz, válassz véletlenül
+        if top3[0][0] - top3[-1][0] < 3:
+            return random.choice([ex for _, ex in top3])
     return best_ex
 
 # ============================================================
@@ -311,7 +326,7 @@ tech_choice_labels = st.sidebar.multiselect(
     default=tech_options[:1] if tech_options else []
 )
 
-selected_tech_codes = []
+selected_tech_codes: List[str] = []
 for label in tech_choice_labels:
     for c, l in tech_labels_map.items():
         if l == label:
@@ -330,43 +345,13 @@ if not generate:
     st.stop()
 
 # ============================================================
-# EDZÉSTERV ÖSSZERAKÁSA – FOKOZATOSAN LAZÍTOTT SZŰRÉS + DUPLIKÁCIÓ TILTÁSA
+# EDZÉSTERV ÖSSZERAKÁSA – KOROSZTÁLY SZŰRÉS + DUPLIKÁCIÓ TILTÁSA
 # ============================================================
 
-def candidates_for_stage(stage: str, used_keys: set) -> Optional[Dict[str, Any]]:
-    """
-    Fokozatosan lazítjuk a szűrést:
-    1) age + tact + tech
-    2) age + tact
-    3) age only
-    4) bármi az adatbázisból
-    """
-    # 1. age + tact + tech
-    cand = EX_DB
-    cand = filter_by_age(cand, selected_age_code)
-    cand = filter_by_tact(cand, selected_tact_code)
-    cand = filter_by_tech(cand, selected_tech_codes)
-    ex = pick_exercise_for_stage(cand, stage, used_keys)
-    if ex:
-        return ex
-
-    # 2. age + tact
-    cand = EX_DB
-    cand = filter_by_age(cand, selected_age_code)
-    cand = filter_by_tact(cand, selected_tact_code)
-    ex = pick_exercise_for_stage(cand, stage, used_keys)
-    if ex:
-        return ex
-
-    # 3. csak age
-    cand = filter_by_age(EX_DB, selected_age_code)
-    ex = pick_exercise_for_stage(cand, stage, used_keys)
-    if ex:
-        return ex
-
-    # 4. teljes adatbázis
-    ex = pick_exercise_for_stage(EX_DB, stage, used_keys)
-    return ex
+age_filtered = filter_by_age(EX_DB, selected_age_code)
+if not age_filtered:
+    st.error("A kiválasztott korosztályhoz nem találtam gyakorlatot.")
+    st.stop()
 
 used_keys = set()
 plan: List[Dict[str, Any]] = []
@@ -378,7 +363,13 @@ stages = [
 ]
 
 for label, code in stages:
-    ex = candidates_for_stage(code, used_keys)
+    ex = pick_exercise_for_stage(
+        age_filtered,
+        code,
+        used_keys,
+        selected_tact_code,
+        selected_tech_codes
+    )
     if ex:
         plan.append((label, code, ex))
         used_keys.add(normalized_key(ex))
@@ -472,7 +463,7 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
 st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
 
 # ============================================================
-# PDF GENERÁLÁS – EGY LETÖLTŐGOMB, SAFE WRAP
+# PDF GENERÁLÁS – CSAK DEJAVU, SAFE WRAP
 # ============================================================
 
 def safe_wrap(text: str, width: int = 110) -> str:
@@ -494,26 +485,24 @@ class TrainingPDF(FPDF):
     def __init__(self):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.set_auto_page_break(auto=True, margin=15)
-        try:
-            self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-            self.set_font("DejaVu", size=11)
-        except Exception:
-            self.set_font("Helvetica", size=11)
+        # Itt kötelező a DejaVuSans.ttf jelenléte a projekt gyökerében
+        self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+        self.set_font("DejaVu", size=11)
 
     def header(self):
         self.set_fill_color(220, 210, 240)
         self.rect(0, 0, 210, 18, "F")
         self.set_xy(10, 5)
-        self.set_font("Helvetica", size=10)
+        self.set_font("DejaVu", size=10)
         self.cell(0, 5, "chatbotfootball training planner", ln=1)
         self.set_x(10)
-        self.set_font("Helvetica", size=9)
-        self.cell(0, 4, "Edzésterv – magyar leírás", ln=1)
+        self.set_font("DejaVu", size=9)
+        self.cell(0, 4, "Edzesterv - magyar leiras", ln=1)
         self.ln(2)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font("Helvetica", size=8)
+        self.set_font("DejaVu", size=8)
         self.set_text_color(120, 120, 120)
         self.cell(0, 5, f"Page {self.page_no()}", align="C")
 
@@ -533,50 +522,50 @@ def build_pdf(
     pdf.set_text_color(0, 0, 0)
     pdf.ln(15)
 
-    pdf.set_font("Helvetica", size=18)
-    pdf.cell(0, 10, "Edzésterv – Training Plan", ln=1)
+    pdf.set_font("DejaVu", size=18)
+    pdf.cell(0, 10, "Edzesterv - Training Plan", ln=1)
     pdf.ln(4)
 
-    pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, f"Korosztály: {age_choice}", ln=1)
-    pdf.cell(0, 6, f"Játékoslétszám: {players_raw}", ln=1)
-    pdf.cell(0, 6, f"Össz edzésidő: {total_time}", ln=1)
+    pdf.set_font("DejaVu", size=11)
+    pdf.cell(0, 6, f"Korosztaly: {age_choice}", ln=1)
+    pdf.cell(0, 6, f"Jatekosletszam: {players_raw}", ln=1)
+    pdf.cell(0, 6, f"Ossz edzesido: {total_time}", ln=1)
     pdf.ln(4)
-    pdf.cell(0, 6, f"Taktikai cél: {tact_choice}", ln=1)
+    pdf.cell(0, 6, f"Taktikai cel: {tact_choice}", ln=1)
     pdf.cell(
         0, 6,
-        f"Technikai fókusz: {', '.join(tech_choice_labels) if tech_choice_labels else 'nincs megadva'}",
+        f"Technikai fokusz: {', '.join(tech_choice_labels) if tech_choice_labels else 'nincs megadva'}",
         ln=1,
     )
-    pdf.cell(0, 6, f"Edző: {coach_id or 'nincs megadva'}", ln=1)
+    pdf.cell(0, 6, f"Edzo: {coach_id or 'nincs megadva'}", ln=1)
 
     pdf.ln(8)
     intro = (
-        "Az edzésterv 4 blokkból áll: bemelegítés, kis létszámú játék, nagyobb létszámú taktikai játék "
-        "és egy meccsjáték jellegű fő rész. A gyakorlatok magyar leírást, coaching pontokat és variációkat tartalmaznak."
+        "Az edzesterv 4 blokbol all: bemelegites, kis letszamu jatek, nagyobb letszamu taktikai jatek "
+        "es egy meccsjatek jellegu fo resz. A gyakorlatok magyar leirast, coaching pontokat es variaciokat tartalmaznak."
     )
-    pdf.set_font("Helvetica", size=10)
+    pdf.set_font("DejaVu", size=10)
     pdf.multi_cell(0, 5, safe_wrap(intro), align="L")
 
     for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
         pdf.add_page()
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Helvetica", size=14)
+        pdf.set_font("DejaVu", size=14)
         pdf.cell(0, 8, f"{idx}. {stage_label}", ln=1)
         pdf.ln(2)
 
-        title = ex.get("title_hu", "Névtelen gyakorlat")
+        title = ex.get("title_hu", "Nevenincs gyakorlat")
         fmt = ex.get("format", "")
         ex_type = ex.get("exercise_type", "")
         pitch = ex.get("pitch_size", "")
         dur = ex.get("duration_minutes", "")
         intensity = ex.get("intensity", "")
 
-        pdf.set_font("Helvetica", size=12)
-        pdf.multi_cell(0, 6, safe_wrap(f"Cím: {title}", width=110), align="L")
-        pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 5, safe_wrap(f"Formátum: {fmt}   |   Típus: {ex_type}", width=110), align="L")
-        pdf.multi_cell(0, 5, safe_wrap(f"Pályaméret: {pitch}   |   Időtartam: {dur} perc   |   Intenzitás: {intensity}", width=110), align="L")
+        pdf.set_font("DejaVu", size=12)
+        pdf.multi_cell(0, 6, safe_wrap(f"Cim: {title}", width=110), align="L")
+        pdf.set_font("DejaVu", size=10)
+        pdf.multi_cell(0, 5, safe_wrap(f"Formatum: {fmt}   |   Tipus: {ex_type}", width=110), align="L")
+        pdf.multi_cell(0, 5, safe_wrap(f"Palya meret: {pitch}   |   Idotartam: {dur} perc   |   Intenzitas: {intensity}", width=110), align="L")
         pdf.ln(3)
 
         img_url = get_image_url(ex)
@@ -594,53 +583,53 @@ def build_pdf(
 
         org = ex.get("organisation_hu")
         if org:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font("DejaVu", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Szervezés", ln=1)
+            pdf.cell(0, 7, "Szervezes", ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("DejaVu", size=10)
             pdf.multi_cell(0, 5, safe_wrap(org), align="L")
             pdf.ln(2)
 
         desc = ex.get("description_hu")
         if desc:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font("DejaVu", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Leírás / menete", ln=1)
+            pdf.cell(0, 7, "Leiras / menete", ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("DejaVu", size=10)
             pdf.multi_cell(0, 5, safe_wrap(desc), align="L")
             pdf.ln(2)
 
         cps = ex.get("coaching_points_hu") or []
         if cps:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font("DejaVu", size=11)
             pdf.set_text_color(60, 0, 90)
             pdf.cell(0, 7, "Coaching pontok", ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("DejaVu", size=10)
             for p in cps:
-                pdf.multi_cell(0, 5, safe_wrap(f"• {p}"), align="L")
+                pdf.multi_cell(0, 5, safe_wrap(f"- {p}"), align="L")
             pdf.ln(2)
 
         vars_ = ex.get("variations_hu") or []
         if vars_:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font("DejaVu", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Variációk", ln=1)
+            pdf.cell(0, 7, "Variaciok", ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("DejaVu", size=10)
             for v in vars_:
                 pdf.multi_cell(0, 5, safe_wrap(f"- {v}"), align="L")
             pdf.ln(2)
 
         prog = ex.get("progression_hu")
         if prog:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font("DejaVu", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Progresszió", ln=1)
+            pdf.cell(0, 7, "Progresszio", ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("DejaVu", size=10)
             pdf.multi_cell(0, 5, safe_wrap(prog), align="L")
             pdf.ln(2)
 
