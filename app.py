@@ -40,7 +40,7 @@ st.markdown(
 st.sidebar.header("1. Adatbázis forrása")
 
 use_builtin = st.sidebar.checkbox(
-    "Beépített 300 gyakorlatos adatbázis használata (`training_database.json`)",
+    "Beépített 300 gyakorlatos adatbázis használata (`training_DATABASE.json`)",
     value=True
 )
 
@@ -105,13 +105,11 @@ def get_image_url(ex: Dict[str, Any]) -> Optional[str]:
     url = ex.get("image_url")
     if url:
         return url
-    # ha később lesz local_image vagy hasonló, itt bővíthető
     return None
 
 
-# Egyszerű placeholder kép – ha nincs saját image_url
+# Placeholder kép – ha nincs saját image_url
 PLACEHOLDER_IMAGE = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
-
 
 # ============================================================
 # PONTSZÁMÍTÁS – MELYIK GYAKORLAT ILLESZKEDIK JOBBAN AZ ADOTT BLOKKHOZ?
@@ -124,16 +122,13 @@ def format_size_score(fmt: str, target: str) -> int:
     """
     fmt = (fmt or "").lower()
     score = 0
-    # próbáljuk kihámozni a számokat
-    # pl. "4v2" -> 6 játékos, "4v4+2" -> 10 stb.
     import re
     nums = re.findall(r"\d+", fmt)
     total = 0
     if nums:
-        total = sum(int(n) for n in nums[:2])  # 4v2 -> 4+2
+        total = sum(int(n) for n in nums[:2])  # pl. "4v2" -> 4+2
 
     if target == "small":
-        # 3-8 játékos körül az ideális
         if 3 <= total <= 8:
             score += 5
         elif total <= 12:
@@ -159,9 +154,7 @@ def format_size_score(fmt: str, target: str) -> int:
 
 
 def intensity_score(ex_intensity: str, target: str) -> int:
-    """ex_intensity: 'alacsony–közepes', 'közepes', 'közepes–magas' stb."""
     ei = (ex_intensity or "").lower()
-    # nagyon egyszerű heuriszta
     if target == "low":
         if "alacsony" in ei:
             return 4
@@ -207,7 +200,6 @@ def exercise_type_score(ex_type: str, stage: str) -> int:
             score -= 1
 
     elif stage == "main":
-        # meccsjáték jelleg
         if "game" in t or "pressing game" in t or "transition game" in t or "small-sided" in t:
             score += 6
         if "rondó" in t or "rondo" in t:
@@ -242,29 +234,24 @@ def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
 
     score += exercise_type_score(ex_type, stage)
 
-    # kicsi random, hogy ne mindig ugyanazt adja
     score += random.uniform(0, 1)
-
     return score
 
 
 def pick_exercise_for_stage(
     ex_list: List[Dict[str, Any]],
-    stage: str,
-    used_ids: set
+    stage: str
 ) -> Optional[Dict[str, Any]]:
     """
     Kiválasztja a legjobb gyakorlatot az adott szakaszra.
-    ex_list: már korosztály / taktika / technika szerint szűrt lista.
+    NINCS id alapú kizárás – a hívó félnek kell eltávolítani a már választott gyakorlatot a listából.
     """
-    candidates = [ex for ex in ex_list if ex.get("id") not in used_ids]
-    if not candidates:
+    if not ex_list:
         return None
 
-    scored = [(score_exercise_for_stage(ex, stage), ex) for ex in candidates]
+    scored = [(score_exercise_for_stage(ex, stage), ex) for ex in ex_list]
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Ha a legjobb pontszám nagyon alacsony, akkor is adjunk valamit – legfeljebb a top 3-ból random.
     best_score, best_ex = scored[0]
     if best_score < 1 and len(scored) >= 3:
         return random.choice([ex for _, ex in scored[:3]])
@@ -288,7 +275,6 @@ age_choice = st.sidebar.selectbox("Korosztály:", age_options, index=1 if len(ag
 
 selected_age_code = None
 if age_choice != "Bármely":
-    # keresd meg a code-ot label alapján
     for code, label in age_labels_map.items():
         if label == age_choice:
             selected_age_code = code
@@ -343,7 +329,6 @@ total_time = st.sidebar.text_input("Össz edzésidő (pl. 75 perc, 90 perc):", v
 st.sidebar.markdown("---")
 coach_id = st.sidebar.text_input("Edző azonosító (név / email – későbbi historyhoz):", value="coach_1")
 
-
 generate = st.sidebar.button("🎯 Edzésterv generálása")
 
 if not generate:
@@ -354,7 +339,6 @@ if not generate:
 # EDZÉSTERV ÖSSZERAKÁSA AZ ÚJ ADATBÁZISBÓL
 # ============================================================
 
-# 1) Alapszűrés: korosztály + taktika + technika
 filtered = EX_DB
 filtered = filter_by_age(filtered, selected_age_code)
 filtered = filter_by_tact(filtered, selected_tact_code)
@@ -364,7 +348,9 @@ if not filtered:
     st.error("❌ A megadott szűrőkkel nem találtam gyakorlatot. Próbálj lazább szűrést (pl. 'Bármely' taktikára / technikára).")
     st.stop()
 
-used_ids = set()
+# dolgozzunk egy másolaton, amiből kiszedjük a már kiválasztott gyakorlatokat
+available = filtered.copy()
+
 plan: List[Dict[str, Any]] = []
 stages = [
     ("Bemelegítés", "warmup"),
@@ -374,10 +360,14 @@ stages = [
 ]
 
 for label, code in stages:
-    ex = pick_exercise_for_stage(filtered, code, used_ids)
+    ex = pick_exercise_for_stage(available, code)
     if ex:
         plan.append((label, code, ex))
-        used_ids.add(ex.get("id"))
+        # távolítsuk el az available listából, hogy ne jöhessen vissza ugyanaz
+        try:
+            available.remove(ex)
+        except ValueError:
+            pass
     else:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
 
@@ -468,7 +458,6 @@ class TrainingPDF(FPDF):
     def __init__(self):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.set_auto_page_break(auto=True, margin=15)
-        # Próbáljuk meg a DejaVu fontot; ha nincs, használjunk alap Helvetica-t
         try:
             self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
             self.set_font("DejaVu", size=11)
@@ -506,7 +495,6 @@ def build_pdf(
 ) -> BytesIO:
     pdf = TrainingPDF()
 
-    # Címlap
     pdf.add_page()
     pdf.set_text_color(0, 0, 0)
     pdf.ln(15)
@@ -536,7 +524,6 @@ def build_pdf(
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(0, 5, intro, align="L")
 
-    # Gyakorlatok
     for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
         pdf.add_page()
         pdf.set_text_color(0, 0, 0)
@@ -558,7 +545,6 @@ def build_pdf(
         pdf.multi_cell(0, 5, f"Pályaméret: {pitch}   |   Időtartam: {dur} perc   |   Intenzitás: {intensity}", align="L")
         pdf.ln(3)
 
-        # Kép beillesztése (ha van image_url)
         img_url = get_image_url(ex)
         if img_url:
             try:
@@ -567,14 +553,11 @@ def build_pdf(
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     tmp.write(resp.content)
                     tmp_path = tmp.name
-                # kb. fél oldalas szélesség
                 pdf.image(tmp_path, x=10, y=None, w=90)
                 pdf.ln(5)
             except Exception:
-                # Ha nem sikerül, akkor kihagyjuk a képet
                 pass
 
-        # Szervezés
         org = ex.get("organisation_hu")
         if org:
             pdf.set_font("Helvetica", size=11)
@@ -585,7 +568,6 @@ def build_pdf(
             pdf.multi_cell(0, 5, org, align="L")
             pdf.ln(2)
 
-        # Leírás
         desc = ex.get("description_hu")
         if desc:
             pdf.set_font("Helvetica", size=11)
@@ -596,7 +578,6 @@ def build_pdf(
             pdf.multi_cell(0, 5, desc, align="L")
             pdf.ln(2)
 
-        # Coaching pontok
         cps = ex.get("coaching_points_hu") or []
         if cps:
             pdf.set_font("Helvetica", size=11)
@@ -608,7 +589,6 @@ def build_pdf(
                 pdf.multi_cell(0, 5, f"• {p}", align="L")
             pdf.ln(2)
 
-        # Variációk
         vars_ = ex.get("variations_hu") or []
         if vars_:
             pdf.set_font("Helvetica", size=11)
@@ -620,7 +600,6 @@ def build_pdf(
                 pdf.multi_cell(0, 5, f"- {v}", align="L")
             pdf.ln(2)
 
-        # Progresszió
         prog = ex.get("progression_hu")
         if prog:
             pdf.set_font("Helvetica", size=11)
@@ -631,9 +610,7 @@ def build_pdf(
             pdf.multi_cell(0, 5, prog, align="L")
             pdf.ln(2)
 
-    # PDF visszaadása BytesIO-ként
     pdf_bytes_raw = pdf.output(dest="S")
-    # fpdf/fpdf2 különböző típusokat adhat vissza: bytes vagy bytearray
     if isinstance(pdf_bytes_raw, bytes):
         pdf_bytes = pdf_bytes_raw
     else:
@@ -647,7 +624,7 @@ def build_pdf(
 
 st.markdown("### 📄 PDF export")
 
-if st.button("📥 Két nyelvű (HU) PDF edzésterv generálása"):
+if st.button("📥 Magyar PDF edzésterv generálása"):
     try:
         pdf_bytes = build_pdf(
             plan=plan,
