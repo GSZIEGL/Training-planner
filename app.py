@@ -3,6 +3,7 @@ import random
 from io import BytesIO
 from typing import List, Dict, Any, Optional
 
+import re
 import requests
 import streamlit as st
 
@@ -30,7 +31,7 @@ st.markdown(
     3. **Cél2 – nagyobb létszámú taktikai játék**  
     4. **Cél3 – fő rész, meccsjáték jellegű feladat**  
 
-    Alul egy gombbal **PDF-et is generálhatsz** az edzéstervből (képpel együtt, ha elérhető).
+    Alul egy gombbal **PDF-et is letölthetsz** az edzéstervből (képpel együtt, ha elérhető).
     """
 )
 
@@ -71,7 +72,7 @@ if not EX_DB:
     st.stop()
 
 # ============================================================
-# SEGÉDFÜGGVÉNYEK AZ ÚJ ADATSZERKEZETHEZ
+# SEGÉDFÜGGVÉNYEK
 # ============================================================
 
 def filter_by_age(ex_list: List[Dict[str, Any]], age_code: Optional[str]) -> List[Dict[str, Any]]:
@@ -99,25 +100,31 @@ def get_image_url(ex: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-# Placeholder kép – ha nincs saját image_url
 PLACEHOLDER_IMAGE = "https://raw.githubusercontent.com/GSZIEGL/Training-planner/main/match_game.png"
 
+
+def normalized_key(ex: Dict[str, Any]) -> tuple:
+    """
+    Azonos gyakorlat külön variációi (pl. #1, #2) ugyanazt a kulcsot kapják.
+    Levágjuk a cím végéről a zárójeles részt, pl. "(Felnőtt, #2)".
+    """
+    title = ex.get("title_hu", "") or ""
+    fmt = ex.get("format", "") or ""
+    # minden zárójelben lévő rész (a végéről) törölve
+    title_clean = re.sub(r"\s*\([^)]*#\d+[^)]*\)\s*$", "", title).strip().lower()
+    return (title_clean, fmt.strip().lower())
+
 # ============================================================
-# PONTSZÁMÍTÁS – MELYIK GYAKORLAT ILLESZKEDIK JOBBAN AZ ADOTT BLOKKHOZ?
+# PONTSZÁMÍTÁS
 # ============================================================
 
 def format_size_score(fmt: str, target: str) -> int:
-    """
-    Nagyon egyszerű heuriszta: létszám alapján pontozunk.
-    target: "small", "medium", "large"
-    """
     fmt = (fmt or "").lower()
     score = 0
-    import re
     nums = re.findall(r"\d+", fmt)
     total = 0
     if nums:
-        total = sum(int(n) for n in nums[:2])  # pl. "4v2" -> 4+2
+        total = sum(int(n) for n in nums[:2])
 
     if target == "small":
         if 3 <= total <= 8:
@@ -168,30 +175,25 @@ def intensity_score(ex_intensity: str, target: str) -> int:
 
 
 def exercise_type_score(ex_type: str, stage: str) -> int:
-    """stage: 'warmup', 'small', 'large', 'main'"""
     t = (ex_type or "").lower()
     score = 0
 
     if stage == "warmup":
-        if "rondó" in t or "rondo" in t or "positional" in t:
+        if "rondó" in t or "rondo" in t or "warm" in t or "positional" in t:
             score += 5
-        if "finishing" in t:
+        if "finishing" in t or "game" in t:
             score -= 2
 
     elif stage == "small":
         if "rondó" in t or "rondo" in t or "small-sided" in t or "positional" in t:
             score += 5
-        if "finishing circuit" in t:
-            score -= 1
 
     elif stage == "large":
         if "positional" in t or "pressing" in t or "small-sided" in t:
             score += 5
-        if "finishing" in t and "game" not in t:
-            score -= 1
 
     elif stage == "main":
-        if "game" in t or "pressing game" in t or "transition game" in t or "small-sided" in t:
+        if "game" in t or "pressing game" in t or "transition game" in t:
             score += 6
         if "rondó" in t or "rondo" in t:
             score -= 2
@@ -220,7 +222,6 @@ def score_exercise_for_stage(ex: Dict[str, Any], stage: str) -> float:
         score += intensity_score(intensity, "high")
 
     score += exercise_type_score(ex_type, stage)
-
     score += random.uniform(0, 1)
     return score
 
@@ -232,12 +233,11 @@ def pick_exercise_for_stage(
 ) -> Optional[Dict[str, Any]]:
     """
     ex_list: jelöltek az adott szakaszra (korosztály/taktika/technika alapján).
-    used_keys: már használt (cím, formátum) párosok – ezeket kizárjuk.
+    used_keys: már használt normalizált kulcsok (cím_clean, formátum).
     """
-    # szűrés a már használtakra
     candidates = []
     for ex in ex_list:
-        key = (ex.get("title_hu", ""), ex.get("format", ""))
+        key = normalized_key(ex)
         if key not in used_keys:
             candidates.append(ex)
 
@@ -251,7 +251,6 @@ def pick_exercise_for_stage(
     if best_score < 1 and len(scored) >= 3:
         return random.choice([ex for _, ex in scored[:3]])
     return best_ex
-
 
 # ============================================================
 # OLDALSÁV – PARAMÉTEREK
@@ -341,7 +340,6 @@ def candidates_for_stage(stage: str, used_keys: set) -> Optional[Dict[str, Any]]
     2) age + tact
     3) age only
     4) bármi az adatbázisból
-    Mindegyiknél kizárjuk a már használt (cím, formátum) párosokat.
     """
     # 1. age + tact + tech
     cand = EX_DB
@@ -383,8 +381,7 @@ for label, code in stages:
     ex = candidates_for_stage(code, used_keys)
     if ex:
         plan.append((label, code, ex))
-        key = (ex.get("title_hu", ""), ex.get("format", ""))
-        used_keys.add(key)
+        used_keys.add(normalized_key(ex))
     else:
         st.warning(f"Nem találtam gyakorlatot ehhez a szakaszhoz: {label}")
 
@@ -432,8 +429,15 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
     with c2:
         title = ex.get("title_hu", "Névtelen gyakorlat (HU)")
         st.markdown(f"**Cím:** {title}")
-        st.markdown(f"**Formátum:** {ex.get('format', 'nincs megadva')} &nbsp;&nbsp; | &nbsp;&nbsp; **Típus:** {ex.get('exercise_type', 'nincs megadva')}")
-        st.markdown(f"**Pályaméret:** {ex.get('pitch_size', 'nincs megadva')} &nbsp;&nbsp; | &nbsp;&nbsp; **Időtartam:** {ex.get('duration_minutes', 'n/a')} perc &nbsp;&nbsp; | &nbsp;&nbsp; **Intenzitás:** {ex.get('intensity', 'n/a')}")
+        st.markdown(
+            f"**Formátum:** {ex.get('format', 'nincs megadva')} "
+            f"&nbsp;&nbsp; | &nbsp;&nbsp; **Típus:** {ex.get('exercise_type', 'nincs megadva')}"
+        )
+        st.markdown(
+            f"**Pályaméret:** {ex.get('pitch_size', 'nincs megadva')} "
+            f"&nbsp;&nbsp; | &nbsp;&nbsp; **Időtartam:** {ex.get('duration_minutes', 'n/a')} perc "
+            f"&nbsp;&nbsp; | &nbsp;&nbsp; **Intenzitás:** {ex.get('intensity', 'n/a')}"
+        )
 
         org = ex.get("organisation_hu")
         desc = ex.get("description_hu")
@@ -468,11 +472,10 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
 st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
 
 # ============================================================
-# PDF GENERÁLÁS – SAFE WRAP + KÉP
+# PDF GENERÁLÁS – EGY LETÖLTŐGOMB, SAFE WRAP
 # ============================================================
 
 def safe_wrap(text: str, width: int = 110) -> str:
-    """Túl hosszú szavakat is feldarabol, hogy a PDF ne dobjon hibát."""
     if not text:
         return ""
     words = text.split()
@@ -494,10 +497,8 @@ class TrainingPDF(FPDF):
         try:
             self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
             self.set_font("DejaVu", size=11)
-            self._use_dejavu = True
         except Exception:
             self.set_font("Helvetica", size=11)
-            self._use_dejavu = False
 
     def header(self):
         self.set_fill_color(220, 210, 240)
@@ -525,7 +526,7 @@ def build_pdf(
     tact_choice: str,
     tech_choice_labels: List[str],
     coach_id: str
-) -> BytesIO:
+) -> bytes:
     pdf = TrainingPDF()
 
     pdf.add_page()
@@ -643,38 +644,29 @@ def build_pdf(
             pdf.multi_cell(0, 5, safe_wrap(prog), align="L")
             pdf.ln(2)
 
-    pdf_bytes_raw = pdf.output(dest="S")
-    if isinstance(pdf_bytes_raw, bytes):
-        pdf_bytes = pdf_bytes_raw
-    else:
-        pdf_bytes = bytes(pdf_bytes_raw)
-
-    buffer = BytesIO()
-    buffer.write(pdf_bytes)
-    buffer.seek(0)
-    return buffer
+    out = pdf.output(dest="S")
+    if isinstance(out, bytes):
+        return out
+    return bytes(out)
 
 
 st.markdown("### 📄 PDF export")
 
-if st.button("📥 Magyar PDF edzésterv generálása"):
-    try:
-        pdf_bytes = build_pdf(
-            plan=plan,
-            age_choice=age_choice,
-            players_raw=players_raw,
-            total_time=total_time,
-            tact_choice=tact_choice,
-            tech_choice_labels=tech_choice_labels,
-            coach_id=coach_id,
-        )
-        st.download_button(
-            label="📥 PDF letöltése",
-            data=pdf_bytes,
-            file_name="edzesterv_magyar.pdf",
-            mime="application/pdf"
-        )
-    except Exception as e:
-        st.error(f"PDF generálási hiba: {e}")
-else:
-    st.caption("Nyomd meg a gombot a PDF edzésterv letöltéséhez.")
+try:
+    pdf_bytes = build_pdf(
+        plan=plan,
+        age_choice=age_choice,
+        players_raw=players_raw,
+        total_time=total_time,
+        tact_choice=tact_choice,
+        tech_choice_labels=tech_choice_labels,
+        coach_id=coach_id,
+    )
+    st.download_button(
+        label="📥 Magyar PDF edzésterv letöltése",
+        data=pdf_bytes,
+        file_name="edzesterv_magyar.pdf",
+        mime="application/pdf"
+    )
+except Exception as e:
+    st.error(f"PDF generálási hiba: {e}")
