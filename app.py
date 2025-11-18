@@ -72,6 +72,26 @@ if not EX_DB:
     st.stop()
 
 # ============================================================
+# BLOKKOLT (SABLON) GYAKORLATOK KISZŰRÉSE
+# ============================================================
+
+def is_blocked_exercise(ex: Dict[str, Any]) -> bool:
+    """
+    Ide tesszük azokat a szabályokat, amivel a sablon meccsjátékodat kizárjuk.
+    Jelenleg: ha a címben van 'positional game' ÉS '7v5', akkor nem használjuk.
+    """
+    title = (ex.get("title_hu") or "").lower()
+    if "positional game" in title and "7v5" in title:
+        return True
+    return False
+
+EX_DB = [ex for ex in EX_DB if not is_blocked_exercise(ex)]
+
+if not EX_DB:
+    st.error("Minden gyakorlat ki lett szűrve (blokkoló szabályok miatt). Vékonyítsd a szűrést.")
+    st.stop()
+
+# ============================================================
 # SEGÉDFÜGGVÉNYEK
 # ============================================================
 
@@ -259,10 +279,8 @@ def pick_exercise_for_stage(
     scored.sort(key=lambda x: x[0], reverse=True)
 
     best_score, best_ex = scored[0]
-    # ha nagyon szoros az élmezőny, random válasszunk a top 3-ból
     if len(scored) >= 3:
         top3 = scored[:3]
-        # ha a három pontszám közel van egymáshoz, válassz véletlenül
         if top3[0][0] - top3[-1][0] < 3:
             return random.choice([ex for _, ex in top3])
     return best_ex
@@ -463,13 +481,38 @@ for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
 st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
 
 # ============================================================
-# PDF GENERÁLÁS – CSAK DEJAVU, SAFE WRAP
+# PDF GENERÁLÁS – ASCII-SANITIZE + HELVETICA
 # ============================================================
 
-def safe_wrap(text: str, width: int = 110) -> str:
+PDF_CHAR_MAP = {
+    "á": "a", "é": "e", "í": "i", "ó": "o", "ö": "o", "ő": "o",
+    "ú": "u", "ü": "u", "ű": "u",
+    "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ö": "O", "Ő": "O",
+    "Ú": "U", "Ü": "U", "Ű": "U",
+    "–": "-", "—": "-", "-": "-",
+    "„": '"', "“": '"', "”": '"', "’": "'", "…": "...",
+}
+
+
+def pdf_safe(text: str) -> str:
     if not text:
         return ""
-    words = text.split()
+    out_chars = []
+    for ch in text:
+        if ch in PDF_CHAR_MAP:
+            out_chars.append(PDF_CHAR_MAP[ch])
+        elif ord(ch) < 128:
+            out_chars.append(ch)
+        else:
+            out_chars.append("?")
+    return "".join(out_chars)
+
+
+def safe_wrap(text: str, width: int = 110) -> str:
+    cleaned = pdf_safe(text)
+    if not cleaned:
+        return ""
+    words = cleaned.split()
     processed = []
     for w in words:
         if len(w) > width:
@@ -485,24 +528,22 @@ class TrainingPDF(FPDF):
     def __init__(self):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.set_auto_page_break(auto=True, margin=15)
-        # Itt kötelező a DejaVuSans.ttf jelenléte a projekt gyökerében
-        self.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-        self.set_font("DejaVu", size=11)
+        self.set_font("Helvetica", size=11)
 
     def header(self):
         self.set_fill_color(220, 210, 240)
         self.rect(0, 0, 210, 18, "F")
         self.set_xy(10, 5)
-        self.set_font("DejaVu", size=10)
+        self.set_font("Helvetica", size=10)
         self.cell(0, 5, "chatbotfootball training planner", ln=1)
         self.set_x(10)
-        self.set_font("DejaVu", size=9)
+        self.set_font("Helvetica", size=9)
         self.cell(0, 4, "Edzesterv - magyar leiras", ln=1)
         self.ln(2)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font("DejaVu", size=8)
+        self.set_font("Helvetica", size=8)
         self.set_text_color(120, 120, 120)
         self.cell(0, 5, f"Page {self.page_no()}", align="C")
 
@@ -522,36 +563,36 @@ def build_pdf(
     pdf.set_text_color(0, 0, 0)
     pdf.ln(15)
 
-    pdf.set_font("DejaVu", size=18)
-    pdf.cell(0, 10, "Edzesterv - Training Plan", ln=1)
+    pdf.set_font("Helvetica", size=18)
+    pdf.cell(0, 10, pdf_safe("Edzesterv - Training Plan"), ln=1)
     pdf.ln(4)
 
-    pdf.set_font("DejaVu", size=11)
-    pdf.cell(0, 6, f"Korosztaly: {age_choice}", ln=1)
-    pdf.cell(0, 6, f"Jatekosletszam: {players_raw}", ln=1)
-    pdf.cell(0, 6, f"Ossz edzesido: {total_time}", ln=1)
+    pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 6, pdf_safe(f"Korosztaly: {age_choice}"), ln=1)
+    pdf.cell(0, 6, pdf_safe(f"Jatekosletszam: {players_raw}"), ln=1)
+    pdf.cell(0, 6, pdf_safe(f"Ossz edzesido: {total_time}"), ln=1)
     pdf.ln(4)
-    pdf.cell(0, 6, f"Taktikai cel: {tact_choice}", ln=1)
+    pdf.cell(0, 6, pdf_safe(f"Taktikai cel: {tact_choice}"), ln=1)
     pdf.cell(
         0, 6,
-        f"Technikai fokusz: {', '.join(tech_choice_labels) if tech_choice_labels else 'nincs megadva'}",
+        pdf_safe(f"Technikai fokusz: {', '.join(tech_choice_labels) if tech_choice_labels else 'nincs megadva'}"),
         ln=1,
     )
-    pdf.cell(0, 6, f"Edzo: {coach_id or 'nincs megadva'}", ln=1)
+    pdf.cell(0, 6, pdf_safe(f"Edzo: {coach_id or 'nincs megadva'}"), ln=1)
 
     pdf.ln(8)
     intro = (
         "Az edzesterv 4 blokbol all: bemelegites, kis letszamu jatek, nagyobb letszamu taktikai jatek "
         "es egy meccsjatek jellegu fo resz. A gyakorlatok magyar leirast, coaching pontokat es variaciokat tartalmaznak."
     )
-    pdf.set_font("DejaVu", size=10)
+    pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(0, 5, safe_wrap(intro), align="L")
 
     for idx, (stage_label, stage_code, ex) in enumerate(plan, start=1):
         pdf.add_page()
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font("DejaVu", size=14)
-        pdf.cell(0, 8, f"{idx}. {stage_label}", ln=1)
+        pdf.set_font("Helvetica", size=14)
+        pdf.cell(0, 8, pdf_safe(f"{idx}. {stage_label}"), ln=1)
         pdf.ln(2)
 
         title = ex.get("title_hu", "Nevenincs gyakorlat")
@@ -561,9 +602,9 @@ def build_pdf(
         dur = ex.get("duration_minutes", "")
         intensity = ex.get("intensity", "")
 
-        pdf.set_font("DejaVu", size=12)
+        pdf.set_font("Helvetica", size=12)
         pdf.multi_cell(0, 6, safe_wrap(f"Cim: {title}", width=110), align="L")
-        pdf.set_font("DejaVu", size=10)
+        pdf.set_font("Helvetica", size=10)
         pdf.multi_cell(0, 5, safe_wrap(f"Formatum: {fmt}   |   Tipus: {ex_type}", width=110), align="L")
         pdf.multi_cell(0, 5, safe_wrap(f"Palya meret: {pitch}   |   Idotartam: {dur} perc   |   Intenzitas: {intensity}", width=110), align="L")
         pdf.ln(3)
@@ -583,53 +624,53 @@ def build_pdf(
 
         org = ex.get("organisation_hu")
         if org:
-            pdf.set_font("DejaVu", size=11)
+            pdf.set_font("Helvetica", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Szervezes", ln=1)
+            pdf.cell(0, 7, pdf_safe("Szervezes"), ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("DejaVu", size=10)
+            pdf.set_font("Helvetica", size=10)
             pdf.multi_cell(0, 5, safe_wrap(org), align="L")
             pdf.ln(2)
 
         desc = ex.get("description_hu")
         if desc:
-            pdf.set_font("DejaVu", size=11)
+            pdf.set_font("Helvetica", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Leiras / menete", ln=1)
+            pdf.cell(0, 7, pdf_safe("Leiras / menete"), ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("DejaVu", size=10)
+            pdf.set_font("Helvetica", size=10)
             pdf.multi_cell(0, 5, safe_wrap(desc), align="L")
             pdf.ln(2)
 
         cps = ex.get("coaching_points_hu") or []
         if cps:
-            pdf.set_font("DejaVu", size=11)
+            pdf.set_font("Helvetica", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Coaching pontok", ln=1)
+            pdf.cell(0, 7, pdf_safe("Coaching pontok"), ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("DejaVu", size=10)
+            pdf.set_font("Helvetica", size=10)
             for p in cps:
                 pdf.multi_cell(0, 5, safe_wrap(f"- {p}"), align="L")
             pdf.ln(2)
 
         vars_ = ex.get("variations_hu") or []
         if vars_:
-            pdf.set_font("DejaVu", size=11)
+            pdf.set_font("Helvetica", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Variaciok", ln=1)
+            pdf.cell(0, 7, pdf_safe("Variaciok"), ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("DejaVu", size=10)
+            pdf.set_font("Helvetica", size=10)
             for v in vars_:
                 pdf.multi_cell(0, 5, safe_wrap(f"- {v}"), align="L")
             pdf.ln(2)
 
         prog = ex.get("progression_hu")
         if prog:
-            pdf.set_font("DejaVu", size=11)
+            pdf.set_font("Helvetica", size=11)
             pdf.set_text_color(60, 0, 90)
-            pdf.cell(0, 7, "Progresszio", ln=1)
+            pdf.cell(0, 7, pdf_safe("Progresszio"), ln=1)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font("DejaVu", size=10)
+            pdf.set_font("Helvetica", size=10)
             pdf.multi_cell(0, 5, safe_wrap(prog), align="L")
             pdf.ln(2)
 
