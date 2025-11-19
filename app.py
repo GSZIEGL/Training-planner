@@ -293,7 +293,10 @@ def create_pdf(plan, plan_meta, coach_notes_for_pdf, exercise_notes_dict) -> byt
     # ----- Blokkok -----
     for idx, (stage_title, ex) in enumerate(plan, start=1):
         pdf.add_page()
-        pdf.set_font("DejaVu", "B", 14)
+        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+        pdf.add_font("DejaVu", "B", "DejaVuSans-Bold.ttf", uni=True)
+        pdf.set_font("DejaVu", "", 12)
+
         pdf.cell(0, 8, f"{idx}. {stage_title}", ln=1)
 
         pdf.set_font("DejaVu", "B", 11)
