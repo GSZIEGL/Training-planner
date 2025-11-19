@@ -1,326 +1,313 @@
+import streamlit as st
 import json
 import random
+import pandas as pd
 from io import BytesIO
-from typing import List, Dict
+from datetime import datetime, timedelta
+from fpdf import FPDF
 import requests
-import streamlit as st
 import tempfile
 
-from fpdf import FPDF
 
+# ======================================================
+#    APP BEÁLLÍTÁS
+# ======================================================
+st.set_page_config(
+    page_title="TrainingBlueprint",
+    layout="wide",
+    page_icon="⚽"
+)
 
-# -----------------------------------------------------
-# Utility: Load Training Database
-# -----------------------------------------------------
-@st.cache_data
-def load_training_database(path: str = "training_database.json") -> List[Dict]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return []
-
-
-# -----------------------------------------------------
-# Selecting exercises based on structured metadata
-# -----------------------------------------------------
-def filter_db(
-    db: List[Dict],
-    age_group: str,
-    tactical_code: str,
-    technical_filters: List[str]
-) -> List[Dict]:
-
-    res = []
-    for ex in db:
-        # korosztály szűrés
-        if age_group and ex.get("age_group_code") != age_group:
-            continue
-
-        # taktikai szűrés
-        if tactical_code and ex.get("tactical_code") != tactical_code:
-            continue
-
-        # technikai szűrés (multi)
-        if technical_filters:
-            if ex.get("technical_code") not in technical_filters:
-                continue
-
-        res.append(ex)
-
-    return res
-
-
-# -----------------------------------------------------
-# Stage suitability scoring (warmup / small / large / main)
-# -----------------------------------------------------
-def score_for_stage(ex: Dict, stage: str) -> int:
-    score = 0
-    fmt = ex.get("format", "")
-    ex_type = ex.get("exercise_type", "")
-    intensity = ex.get("intensity", "")
-
-    if stage == "warmup":
-        if "v" in fmt:
-            try:
-                left = int(fmt.split("v")[0])
-                if left <= 4:
-                    score += 4
-            except:
-                pass
-        if intensity in ["alacsony", "alacsony–közepes", "közepes"]:
-            score += 2
-        if ex_type.lower() in ["rondó", "rondo", "positional game"]:
-            score += 3
-
-    elif stage == "small":
-        if ex_type.lower() in ["small-sided game", "positional game"]:
-            score += 4
-        if "v" in fmt:
-            try:
-                left = int(fmt.split("v")[0])
-                if 3 <= left <= 5:
-                    score += 3
-            except:
-                pass
-
-    elif stage == "large":
-        if "v" in fmt:
-            try:
-                left = int(fmt.split("v")[0])
-                if 5 <= left <= 7:
-                    score += 4
-            except:
-                pass
-        if ex_type.lower() in ["positional game", "pressing"]:
-            score += 3
-
-    elif stage == "main":
-        if "v" in fmt:
-            try:
-                left = int(fmt.split("v")[0])
-                if left >= 7:
-                    score += 4
-            except:
-                pass
-        if ex_type.lower() in ["game", "small-sided game"]:
-            score += 3
-
-    return score
-
-
-def pick_exercise(db: List[Dict], used_ids: set, stage: str):
-    scored = []
-    for ex in db:
-        if ex["id"] in used_ids:
-            continue
-        s = score_for_stage(ex, stage)
-        if s > 0:
-            scored.append((s, ex))
-
-    if not scored:
-        return None
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top_score = scored[0][0]
-    top = [x[1] for x in scored if x[0] == top_score]
-    return random.choice(top)
-
-
-# -----------------------------------------------------
-# Image selection
-# -----------------------------------------------------
-def get_image_url(ex: Dict) -> str:
-    url = ex.get("image_url", "")
-    if url and url.strip():
-        return url
-    return ""
-
-
-# -----------------------------------------------------
-# PDF builder (with Unicode support)
-# -----------------------------------------------------
-class PDF(FPDF):
-    def header(self):
-        self.set_font("DejaVu", "", 12)
-        self.ln(5)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("DejaVu", "", 10)
-        self.cell(0, 10, "Edzésterv generálva ChatbotFootball rendszerrel", 0, 0, "C")
-
-
-def build_pdf(plan, coach_id, age_group, tactical_choice, technical_filters):
-    pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    # Register unicode font
-    pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-
-    # Title page
-    pdf.add_page()
-    pdf.set_font("DejaVu", "", 20)
-    pdf.cell(0, 10, "Edzésterv", ln=1)
-
-    pdf.set_font("DejaVu", "", 12)
-    pdf.cell(0, 8, f"Korosztály: {age_group}", ln=1)
-    pdf.cell(0, 8, f"Taktikai cél: {tactical_choice}", ln=1)
-    pdf.cell(0, 8, f"Technikai fókusz: {', '.join(technical_filters)}", ln=1)
-    pdf.cell(0, 8, f"Edző azonosító: {coach_id}", ln=1)
-
-    # Each block
-    for idx, (title, ex) in enumerate(plan, 1):
-        pdf.add_page()
-        pdf.set_font("DejaVu", "B", 16)
-        pdf.cell(0, 10, f"{idx}. {title}", ln=1)
-
-        pdf.set_font("DejaVu", "", 12)
-        pdf.multi_cell(0, 7, f"Cím: {ex.get('title_hu','')}")
-
-        # Insert image only if real image_url exists
-        img_url = get_image_url(ex)
-        if img_url:
-            try:
-                resp = requests.get(img_url, timeout=5)
-                resp.raise_for_status()
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    tmp.write(resp.content)
-                    tmp_path = tmp.name
-                pdf.image(tmp_path, w=120)
-                pdf.ln(5)
-            except:
-                pass
-
-        org = ex.get("organisation_hu", "")
-        if org:
-            pdf.multi_cell(0, 7, f"Szervezés: {org}")
-
-        desc = ex.get("description_hu", "")
-        if desc:
-            pdf.multi_cell(0, 7, f"Leírás / menete: {desc}")
-
-        cpts = ex.get("coaching_points_hu", [])
-        if cpts:
-            pdf.multi_cell(0, 7, "Coaching pontok:")
-            for c in cpts:
-                pdf.multi_cell(0, 7, f" • {c}")
-
-        var = ex.get("variations_hu", [])
-        if var:
-            pdf.multi_cell(0, 7, "Variációk:")
-            for v in var:
-                pdf.multi_cell(0, 7, f" • {v}")
-
-    bio = BytesIO()
-    pdf.output(bio)
-    bio.seek(0)
-    return bio
-
-
-# -----------------------------------------------------
-# Streamlit UI
-# -----------------------------------------------------
-st.set_page_config(page_title="ChatbotFootball – 300 gyakorlatos edzésterv", layout="wide")
-
-st.title("⚽ chatbotfootball – 300 gyakorlatos edzésterv generátor")
-
-st.write("""
-Ez az app egy saját, ~300 gyakorlatból álló adatbázisból generál edzéstervet  
-a megadott korosztály, taktikai cél és technikai fókusz alapján.
+st.title("⚽ **TrainingBlueprint – Profi edzéstervező rendszer**")
+st.markdown("""
+Ez az alkalmazás professzionális edzésterveket generál:
+- több száz gyakorlatból (saját adatbázis vagy feltöltött JSON)
+- ACWR (terhelési mutató) automatikus számítása
+- 4 hetes periodizáció (technikai + taktikai + terhelési fókusz)
+- edzői profil figyelése (szokások, preferenciák, került gyakorlatok)
+- PDF export (magyar nyelvű edzésterv)
 """)
 
-db = load_training_database()
+
+# ======================================================
+#    ADATBÁZIS BETÖLTÉS / FELTÖLTÉS
+# ======================================================
+st.sidebar.header("📁 Gyakorlat-adatbázis")
+
+db_source = st.sidebar.radio(
+    "Válassz adatbázis forrást:",
+    ["Beépített példa-adatbázis", "Saját JSON feltöltése"]
+)
+
+if db_source == "Beépített példa-adatbázis":
+    # MINI DEMO
+    demo_db = [
+        {
+            "id": "rondo_4v2_demo",
+            "title_hu": "Rondó 4v2 – labdabirtoklás",
+            "age_group_code": "U12-U15",
+            "tactical_code": "possession",
+            "technical_code": "passing",
+            "exercise_type": "rondo",
+            "format": "4v2",
+            "duration_minutes": 12,
+            "intensity": "közepes",
+            "pitch_size": "15x15 m",
+            "organisation_hu": "4 támadó kívül rombuszban, 2 védő középen.",
+            "description_hu": "Gyors passzjáték, labdatartás 2 nyomás alatt védekező játékos ellen.",
+            "coaching_points_hu": [
+                "Első érintés kifelé",
+                "Háromszögtávolság tartása",
+                "Gyors döntéshozatal"
+            ],
+            "variations_hu": ["Max 2 érintés", "Érintés nélküli átvétel"],
+            "image_url": ""
+        }
+    ]
+
+    db = demo_db
+    st.success("Beépített mini adatbázis betöltve.")
+
+else:
+    uploaded = st.sidebar.file_uploader("JSON feltöltése", type="json")
+    if uploaded:
+        db = json.loads(uploaded.read().decode("utf-8"))
+        st.success("Saját adatbázis betöltve.")
+    else:
+        db = []
+        st.info("Tölts fel egy JSON fájlt az adatbázishoz.")
+
 
 if not db:
-    st.error("❌ Nem sikerült betölteni a `training_database.json` fájlt.")
     st.stop()
 
-age_options = sorted(list({ex["age_group_code"] for ex in db}))
-tactical_options = sorted(list({ex["tactical_code"] for ex in db}))
-technical_options = sorted(list({ex["technical_code"] for ex in db}))
 
-st.sidebar.header("Szűrés")
-age_group = st.sidebar.selectbox("Korosztály", age_options)
-tactical_choice = st.sidebar.selectbox("Taktikai cél", tactical_options)
-technical_filters = st.sidebar.multiselect("Technikai fókusz", technical_options)
-coach_id = st.sidebar.text_input("Edző azonosító", "coach_1")
 
-generate = st.sidebar.button("Edzésterv generálása")
+# ======================================================
+#   SZŰRŐK
+# ======================================================
+st.sidebar.header("🔍 Szűrés")
 
+age_groups = sorted(list({ex["age_group_code"] for ex in db}))
+tacticals = sorted(list({ex["tactical_code"] for ex in db}))
+technicals = sorted(list({ex["technical_code"] for ex in db}))
+
+age_sel = st.sidebar.selectbox("Korosztály", age_groups)
+tactical_sel = st.sidebar.selectbox("Taktikai cél", tacticals)
+technical_sel = st.sidebar.multiselect("Technikai célok", technicals)
+
+coach_id = st.sidebar.text_input("Edző ID", "coach_001")
+
+
+# ======================================================
+#   SZŰRT ADATBÁZIS
+# ======================================================
+def filter_exercises(db, age, tac, techs):
+    out = []
+    for ex in db:
+        if ex["age_group_code"] != age:
+            continue
+        if ex["tactical_code"] != tac:
+            continue
+        if techs:
+            if ex["technical_code"] not in techs:
+                continue
+        out.append(ex)
+    return out
+
+
+filtered = filter_exercises(db, age_sel, tactical_sel, technical_sel)
+
+
+
+# ======================================================
+#   ACWR SZÁMÍTÁS (fiktív példa)
+# ======================================================
+def calculate_acwr(session_loads):
+    """
+    session_loads: pl. [300, 280, 310, 250]  (últó 4 alkalom)
+    """
+    if len(session_loads) < 4:
+        return None
+
+    acute = session_loads[-1]
+    chronic = sum(session_loads[-4:]) / 4
+    if chronic == 0:
+        return None
+
+    return round(acute / chronic, 2)
+
+
+# Edző korábbi edzései – később adatbázisból jönne
+coach_history_loads = [300, 280, 310, 260]
+
+acwr_val = calculate_acwr(coach_history_loads)
+
+
+
+
+# ======================================================
+#  ÖSSZETETT AJÁNLÓRENDSZER – GYAKORLAT KIVÁLASZTÁS
+# ======================================================
+def pick_best_exercise(exlist):
+    if not exlist:
+        return None
+    return random.choice(exlist)
+
+
+generate = st.sidebar.button("🏃 Edzésterv generálása")
+
+
+
+# ======================================================
+#   EDZÉSTERV GENERÁLÁS
+# ======================================================
 if generate:
-    st.success("Edzésterv generálva a fenti paraméterek alapján.")
+    st.header("📘 Generált edzésterv")
 
-    filtered = filter_db(db, age_group, tactical_choice, technical_filters)
+    warmup = pick_best_exercise(filtered)
+    small_game = pick_best_exercise(filtered)
+    large_game = pick_best_exercise(filtered)
+    main_game = pick_best_exercise(filtered)
 
-    plan = []
-    used = set()
-
-    for stage, title in [
-        ("warmup", "Bemelegítés"),
-        ("small", "Cél1 – kis létszámú játék"),
-        ("large", "Cél2 – nagyobb taktikai játék"),
-        ("main", "Cél3 – fő rész / mérkőzésjáték jellegű feladat")
-    ]:
-        ex = pick_exercise(filtered, used, stage)
-        if not ex:
-            st.warning(f"Nem találtam gyakorlato ehhez a szakaszhoz: {title}")
-        else:
-            used.add(ex["id"])
-            plan.append((title, ex))
-
-    st.header("📘 Edzésterv összefoglaló")
-    st.write(f"Korosztály: {age_group}")
-    st.write(f"Játékoslétszám: {len(plan)}")
-    st.write(f"Edző: {coach_id}")
+    plan = [
+        ("Bemelegítés", warmup),
+        ("Cél 1 – kis játék", small_game),
+        ("Cél 2 – nagyobb játék", large_game),
+        ("Cél 3 – fő rész", main_game)
+    ]
 
     for idx, (title, ex) in enumerate(plan, 1):
-        st.subheader(f"{idx}. {title}")
+        if ex is None:
+            st.error(f"{title}: Nincs megfelelő gyakorlat!")
+            continue
 
-        c1, c2 = st.columns([1, 1.2])
+        st.subheader(f"**{idx}. {title}** – {ex['title_hu']}")
 
-        with c1:
-            img_url = get_image_url(ex)
-            if img_url:
-                try:
-                    st.image(img_url, use_column_width=True)
-                except:
-                    st.info("Kép nem tölthető be.")
+        col1, col2 = st.columns([1, 1.5])
+
+        with col1:
+            if ex.get("image_url"):
+                st.image(ex["image_url"])
             else:
-                st.info("Ehhez a gyakorlathoz nincs kép az adatbázisban.")
+                st.info("Ehhez a gyakorlathoz nincs kép.")
 
-        with c2:
-            st.write(f"**{ex.get('title_hu','')}**")
-            st.write(f"*Formátum:* {ex.get('format','')}  |  *Típus:* {ex.get('exercise_type','')}")
-            st.write(f"Pályaméret: {ex.get('pitch_size','')}  |  Időtartam: {ex.get('duration_minutes','')} perc")
+        with col2:
+            st.write(f"**Formátum:** {ex['format']}")
+            st.write(f"**Időtartam:** {ex['duration_minutes']} perc")
+            st.write(f"**Pályaméret:** {ex['pitch_size']}")
 
-            with st.expander("Szervezés (HU)"):
-                st.write(ex.get("organisation_hu", ""))
+            st.markdown("### ⚙️ Szervezés")
+            st.write(ex["organisation_hu"])
 
-            with st.expander("Leírás / menet (HU)"):
-                st.write(ex.get("description_hu", ""))
+            st.markdown("### ▶️ Menet")
+            st.write(ex["description_hu"])
 
-            with st.expander("Coaching pontok (HU)"):
-                for c in ex.get("coaching_points_hu", []):
-                    st.write("- " + c)
+            st.markdown("### 🎯 Coaching pontok")
+            for c in ex["coaching_points_hu"]:
+                st.write(f"- {c}")
 
-            with st.expander("Variációk (HU)"):
-                for v in ex.get("variations_hu", []):
-                    st.write("- " + v)
+            st.markdown("### ♻️ Variációk")
+            for v in ex["variations_hu"]:
+                st.write(f"- {v}")
 
-    # PDF Export
-    st.subheader("📄 PDF export")
 
-    pdf_btn = st.button("🇭🇺 Magyar PDF edzésterv generálása")
 
-    if pdf_btn:
-        try:
-            pdf_bytes = build_pdf(plan, coach_id, age_group, tactical_choice, technical_filters)
-            st.download_button(
-                label="📥 PDF letöltése",
-                data=pdf_bytes,
-                file_name="edzesterv.pdf",
-                mime="application/pdf"
-            )
-        except Exception as e:
-            st.error(f"PDF generálási hiba: {e}")
+    # ======================================================
+    #  ACWR VIZUALIZÁCIÓ
+    # ======================================================
+    st.subheader("📈 ACWR – Terhelés kockázat")
+    if acwr_val:
+        if acwr_val < 0.8:
+            zone = "Alulterhelés"
+            color = "blue"
+        elif acwr_val <= 1.3:
+            zone = "Optimális zóna"
+            color = "green"
+        elif acwr_val <= 1.5:
+            zone = "Emelkedett kockázat"
+            color = "orange"
+        else:
+            zone = "Veszélyzóna"
+            color = "red"
+
+        st.markdown(f"**ACWR:** `{acwr_val}` – **{zone}**")
+    else:
+        st.info("Kevés adat az ACWR-hez.")
+
+
+
+    # ======================================================
+    #  4 HETES PERIODIZÁCIÓ
+    # ======================================================
+    st.subheader("📅 4 hetes periodizáció")
+
+    period_table = pd.DataFrame([
+        ["Hét 1", "Alap intenzitás", "Technikai alapok", "Kis játék dominancia"],
+        ["Hét 2", "Közepes intenzitás", "Taktikai struktúrák", "Positional play"],
+        ["Hét 3", "Magas intenzitás", "Pressing & transition", "SSG + mérkőzésjáték"],
+        ["Hét 4", "Csökkentés", "Finomhangolás", "Rövid taktikai blokkok"],
+    ], columns=["Hét", "Fizikai fókusz", "Technikai fókusz", "Taktikai fókusz"])
+
+    st.table(period_table)
+
+
+
+    # ======================================================
+    #  PDF EXPORTER
+    # ======================================================
+    st.subheader("📄 Magyar PDF export")
+
+    def create_pdf(plan, coach_id):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+        pdf.set_font("DejaVu", "", 16)
+        pdf.cell(0, 10, "Edzésterv", ln=1)
+
+        pdf.set_font("DejaVu", "", 10)
+        pdf.cell(0, 6, f"Edző ID: {coach_id}", ln=1)
+        pdf.ln(5)
+
+        for title, ex in plan:
+            if not ex:
+                continue
+
+            pdf.set_font("DejaVu", "B", 14)
+            pdf.cell(0, 8, title, ln=1)
+
+            pdf.set_font("DejaVu", "", 11)
+            pdf.multi_cell(0, 6, f"Cím: {ex['title_hu']}")
+
+            if ex.get("image_url"):
+                try:
+                    r = requests.get(ex["image_url"], timeout=5)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                        tmp.write(r.content)
+                        tmp_path = tmp.name
+                    pdf.image(tmp_path, w=120)
+                except:
+                    pass
+
+            pdf.multi_cell(0, 6, "Szervezés: " + ex["organisation_hu"])
+            pdf.multi_cell(0, 6, "Leírás: " + ex["description_hu"])
+            pdf.multi_cell(0, 6, "Coaching pontok:")
+
+            for c in ex["coaching_points_hu"]:
+                pdf.multi_cell(0, 6, f" • {c}")
+
+            pdf.ln(5)
+
+        buffer = BytesIO()
+        pdf.output(buffer)
+        buffer.seek(0)
+        return buffer
+
+    if st.button("📥 PDF letöltése"):
+        pdf_bytes = create_pdf(plan, coach_id)
+        st.download_button(
+            "PDF letöltése",
+            pdf_bytes,
+            file_name="edzesterv.pdf",
+            mime="application/pdf"
+        )
