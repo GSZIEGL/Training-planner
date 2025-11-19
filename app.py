@@ -423,7 +423,7 @@ if plan:
             pdf.set_font(pdf.base_font, "", 12)
             pdf.cell(0, 7, safe_text("Edző megjegyzései az edzéshez:"), ln=1)
             pdf.set_font(pdf.base_font, "", 11)
-            pdf.multi_cell(0, 6, safe_text(coach_notes))
+            pdf.multi_cell(180, 6, safe_text(coach_notes))
             pdf.ln(4)
 
         # Gyakorlatok
@@ -437,7 +437,7 @@ if plan:
             pdf.cell(0, 8, safe_text(title), ln=1)
 
             pdf.set_font(pdf.base_font, "", 12)
-            pdf.multi_cell(0, 6, safe_text(f"Cím: {ex.get('title_hu','')}"))
+            pdf.multi_cell(180, 6, safe_text(f"Cím: {ex.get('title_hu','')}"))
             pdf.ln(1)
 
             # Kép (ha van)
@@ -458,14 +458,14 @@ if plan:
             pdf.set_font(pdf.base_font, "", 12)
             pdf.cell(0, 6, safe_text("Szervezés:"), ln=1)
             pdf.set_font(pdf.base_font, "", 11)
-            pdf.multi_cell(0, 6, safe_text(ex.get("organisation_hu", "")))
+            pdf.multi_cell(180, 6, safe_text(ex.get("organisation_hu", "")))
             pdf.ln(2)
 
             # Leírás
             pdf.set_font(pdf.base_font, "", 12)
             pdf.cell(0, 6, safe_text("Leírás / menet:"), ln=1)
             pdf.set_font(pdf.base_font, "", 11)
-            pdf.multi_cell(0, 6, safe_text(ex.get("description_hu", "")))
+            pdf.multi_cell(180, 6, safe_text(ex.get("description_hu", "")))
             pdf.ln(2)
 
             # Coaching pontok
@@ -475,7 +475,7 @@ if plan:
                 pdf.cell(0, 6, safe_text("Coaching pontok:"), ln=1)
                 pdf.set_font(pdf.base_font, "", 11)
                 for c in cps:
-                    pdf.multi_cell(0, 6, safe_text(f" • {c}"))
+                    pdf.multi_cell(180, 6, safe_text(f"- {c}"))
                 pdf.ln(2)
 
             # Variációk
@@ -485,7 +485,7 @@ if plan:
                 pdf.cell(0, 6, safe_text("Variációk:"), ln=1)
                 pdf.set_font(pdf.base_font, "", 11)
                 for v in vars_:
-                    pdf.multi_cell(0, 6, safe_text(f" • {v}"))
+                    pdf.multi_cell(180, 6, safe_text(f"- {v}"))
                 pdf.ln(2)
 
             # Edző megjegyzése ehhez a gyakorlathoz
@@ -495,7 +495,7 @@ if plan:
                 pdf.set_font(pdf.base_font, "", 12)
                 pdf.cell(0, 6, safe_text("Edző megjegyzése ehhez a gyakorlathoz:"), ln=1)
                 pdf.set_font(pdf.base_font, "", 11)
-                pdf.multi_cell(0, 6, safe_text(ex_note))
+                pdf.multi_cell(180, 6, safe_text(ex_note))
                 pdf.ln(2)
 
         pdf_bytes = pdf.output(dest="S").encode("latin-1", "ignore")
