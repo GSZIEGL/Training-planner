@@ -3,588 +3,566 @@ from io import BytesIO
 from typing import List, Dict
 
 import streamlit as st
+import pandas as pd
 from fpdf import FPDF
 
-# ======================================================
-# 1. MINTA ADATBÁZIS – BEÉGETETT GYAKORLATOK
-# (később ezt lecseréljük a saját JSON-odra)
-# ======================================================
 
-SAMPLE_EXERCISES: List[Dict] = [
+# =====================================================
+# 0. DEMÓ ADATBÁZIS – KÉSŐBB CSERÉLHETŐ A VALÓDI JSON-RA
+# =====================================================
+
+DEMO_DB: List[Dict] = [
+    # -------- Bemelegítés / rondó jelleg --------
     {
-        "id": "u7_u11_rondo_4v1",
-        "age_group_code": "U7-U11",
-        "tactical_code": "labdabirtoklas",
-        "technical_code": "rovid_passz",
-        "physical_goal": "alacsony",
+        "id": "warmup_u12_rondo",
+        "age_group": "U12–U15",
+        "tactical_goal": "labdabirtoklás",
+        "technical_goal": "rövid passzjáték",
+        "fitness_goal": "alacsony terhelés",
         "period_week": 1,
-        "title_hu": "Labdabirtoklás – 4v1 rondó (U7–U11)",
-        "format": "4v1",
+        "stage_tag": "warmup",
+        "title_hu": "Bemelegítő rondó 4v2",
+        "format": "4v2",
         "exercise_type": "rondó",
-        "pitch_size": "12×12 m",
-        "duration_minutes": 12,
-        "intensity": "alacsony",
-        "organisation_hu": "4 támadó játékos egy négyzet sarkaiban, 1 védő középen.",
-        "description_hu": "A támadók 2 érintővel játszanak, cél a labda megtartása. A védő labdaszerzés után a hibázó támadó megy középre.",
+        "duration_min": 15,
+        "intensity": "alacsony–közepes",
+        "pitch_size": "18×18 m",
+        "organisation_hu": (
+            "Négy támadó a négyzet sarkaiban, két védő középen. "
+            "Labdával rendelkező támadók két érintéssel játszanak."
+        ),
+        "description_hu": (
+            "A támadók célja a labda megtartása, gyors passzokkal. "
+            "A védők labdaszerzés után azonnal visszapasszolják kívülre."
+        ),
         "coaching_points_hu": [
-            "Folyamatos mozgás a labda körül.",
-            "Első érintés a terület felé.",
-            "Kommunikáció: ki kér labdát, ki támogat."
+            "Testhelyzet a labda fogadásához.",
+            "Kommunikáció – ki kér labdát?",
+            "Első érintés iránya kifelé a nyomásból."
         ],
         "variations_hu": [
-            "Max. 1 érintés, ha a gyerekek már magabiztosak.",
-            "Két védő (4v2), nagyobb kihívás."
+            "Max. 2 érintés.",
+            "Labdaszerzés után 5 gyors passz = pont."
         ],
-        "image_url": ""  # most nem használunk külső képet
     },
+
+    # -------- Kis létszámú taktikai játék --------
     {
-        "id": "u7_u11_1v1_futas_kapu",
-        "age_group_code": "U7-U11",
-        "tactical_code": "befejezes",
-        "technical_code": "vezetes_loves",
-        "physical_goal": "kozepes",
-        "period_week": 1,
-        "title_hu": "1v1 futás kapura (U7–U11)",
-        "format": "1v1",
-        "exercise_type": "small-sided game",
-        "pitch_size": "20×15 m",
-        "duration_minutes": 15,
-        "intensity": "közepes",
-        "organisation_hu": "Két sor a félpályán, előttük egy-egy kapu kapussal.",
-        "description_hu": "Edző indítja a labdát középre. A két támadó sprintel, aki előbb ér oda, támad, a másik védekezik. Támadás után gyors visszarendeződés.",
-        "coaching_points_hu": [
-            "Robbanékony indulás, első 3–4 lépés max sebesség.",
-            "Támadásnál határozott befejezés, nem sodródni szögbe.",
-            "Védekezésnél testhelyzet: féloldalas, irányítás kifelé."
-        ],
-        "variations_hu": [
-            "Indulás fekvőtámasz-helyzetből, ülésből, háttal a kapunak.",
-            "2v1 helyzet kialakítása a beindulások után."
-        ],
-        "image_url": ""
-    },
-    {
-        "id": "u12_u15_build_up_6v4",
-        "age_group_code": "U12-U15",
-        "tactical_code": "labdakihozatal",
-        "technical_code": "rovid_passz",
-        "physical_goal": "kozepes",
+        "id": "small_u12_pressing",
+        "age_group": "U12–U15",
+        "tactical_goal": "labdaszerzés / pressing",
+        "technical_goal": "1v1 védekezés",
+        "fitness_goal": "közepes terhelés",
         "period_week": 2,
-        "title_hu": "Labdakihozatal – 6v4 a középső zónában (U12–U15)",
-        "format": "6v4",
-        "exercise_type": "positional game",
-        "pitch_size": "40×30 m",
-        "duration_minutes": 18,
-        "intensity": "közepes",
-        "organisation_hu": "3 zónára osztott pálya, hátul 2 védő + kapus, középen 3 középpályás, elöl 1 csatár. 4 védő próbálja megakadályozni a labdakihozatalt.",
-        "description_hu": "A cél, hogy felépítsük a támadást hátulról, és átjussunk a középső zónán keresztül az utolsó harmadba. Minden sikeres átjuttatott labda pontot ér.",
+        "stage_tag": "small",
+        "title_hu": "3v3 + 2 neutrális – pressing játék",
+        "format": "3v3+2",
+        "exercise_type": "small-sided game",
+        "duration_min": 20,
+        "intensity": "közepes–magas",
+        "pitch_size": "25×20 m",
+        "organisation_hu": (
+            "3v3 játék két neutrális támadóval, akik mindig labdát birtokló csapattal "
+            "játszanak. Játék két kis kapura."
+        ),
+        "description_hu": (
+            "A labdát vesztett csapat azonnal próbál visszatámadni (gegenpressing). "
+            "Cél: 5 passz vagy gól a kis kapukra."
+        ),
         "coaching_points_hu": [
-            "Szélesség és mélység tartása a labdakihozatalnál.",
-            "Kapus bevonása harmadik emberként.",
-            "Testhelyzet: nyitott, hogy előre is lásson a játékos."
+            "Azonnali reakció labdavesztés után.",
+            "Testtartás 1v1 párharcban.",
+            "Neutrális játékosok helyezkedése passzsávokban."
         ],
         "variations_hu": [
-            "Érintésszám-korlát a középpályán (pl. max. 2 érintés).",
-            "Az ellenfél magasabb letámadást alkalmazhat."
+            "Max. 3 érintés a neutrális játékosoknak.",
+            "Labdaszerzés után 5 másodpercen belül kapura lövés."
         ],
-        "image_url": ""
     },
+
+    # -------- Nagyobb létszámú taktikai játék --------
     {
-        "id": "u12_u15_press_5v5",
-        "age_group_code": "U12-U15",
-        "tactical_code": "presszing",
-        "technical_code": "1v1_vedo",
-        "physical_goal": "magas",
+        "id": "large_u16_build_up",
+        "age_group": "U16–U19",
+        "tactical_goal": "labdakihozatal / build-up",
+        "technical_goal": "befejezés technika",
+        "fitness_goal": "közepes terhelés",
         "period_week": 3,
-        "title_hu": "Presszing – 5v5 + kapusok (U12–U15)",
-        "format": "5v5",
-        "exercise_type": "game",
-        "pitch_size": "40×30 m",
-        "duration_minutes": 20,
-        "intensity": "magas",
-        "organisation_hu": "Két csapat 5–5 mezőnyjátékossal és kapusokkal félpályán.",
-        "description_hu": "Cél a gyors labdaszerzés az ellenfél térfelén. Minden labdaszerzésből 10 másodpercen belüli lövés plusz pontot ér.",
+        "stage_tag": "large",
+        "title_hu": "7v5 labdakihozatal a középső zónában",
+        "format": "7v5",
+        "exercise_type": "positional game",
+        "duration_min": 25,
+        "intensity": "közepes",
+        "pitch_size": "40×35 m",
+        "organisation_hu": (
+            "7 támadó a saját térfélen, 5 védő próbál labdát szerezni. "
+            "A cél: kijátszani a pressinget és átjátszani a középső zónát."
+        ),
+        "description_hu": (
+            "A támadó csapat felépíti a játékot hátulról, a labda kijuttatása a kijelölt "
+            "kapukon vagy célzónákon keresztül. Labdavesztéskor azonnali visszatámadás."
+        ),
         "coaching_points_hu": [
-            "Presszing-indító jel: rossz átadás, háttal kapunak álló játékos.",
-            "Távolság a játékosok között – ne legyenek lyukak a csapatban.",
-            "Utópresszing: elvesztett labda után azonnali visszatámadás."
+            "Hátsó lánc szélessége és mélysége.",
+            "Határozott első passz a kapustól.",
+            "Középpályások közti háromszögek kialakítása."
         ],
         "variations_hu": [
-            "Korlátozott visszapassz a kapusnak.",
-            "Az egyik csapat emberhátrányban játszik (5v4)."
+            "Időlimit a labdakihozatalra (pl. 10 másodperc).",
+            "Extra pont, ha a 6-os pozícióban lévő játékos ér labdához."
         ],
-        "image_url": ""
     },
+
+    # -------- Fő rész / mérkőzésjáték --------
     {
-        "id": "u16_u19_finishing_box",
-        "age_group_code": "U16-U19",
-        "tactical_code": "befejezes",
-        "technical_code": "loves_fej",
-        "physical_goal": "magas",
+        "id": "main_u16_game_like",
+        "age_group": "U16–U19",
+        "tactical_goal": "befejezés, gólhelyzet-teremtés",
+        "technical_goal": "1v1 támadás",
+        "fitness_goal": "magas terhelés",
         "period_week": 4,
-        "title_hu": "Befejezés a tizenhatos körül – kombinációs játék (U16–U19)",
-        "format": "3v2+GK",
-        "exercise_type": "finishing",
-        "pitch_size": "30×25 m",
-        "duration_minutes": 18,
+        "stage_tag": "main",
+        "title_hu": "8v8 + kapusok – mérkőzésjáték",
+        "format": "8v8+GK",
+        "exercise_type": "game",
+        "duration_min": 30,
         "intensity": "magas",
-        "organisation_hu": "Három támadó a tizenhatos előtt, két védő és kapus. Labda mindig a 10-esnél indul.",
-        "description_hu": "Kombináció után beindulás a védők mögé, egyérintős befejezés. Váltott szerepek, hogy mindenki legyen befejező és előkészítő is.",
+        "pitch_size": "60×45 m",
+        "organisation_hu": (
+            "Szabályos mérkőzésjáték lerövidített pályán. "
+            "Mindkét csapat 8 mezőnyjátékossal és kapussal."
+        ),
+        "description_hu": (
+            "A hangsúly a gyors támadásbefejezéseken, sok kapura lövéssel. "
+            "Pontszám: gól + extra pont, ha 10 másodpercen belül befejezik a támadást."
+        ),
         "coaching_points_hu": [
-            "Időzített beindulás, ne legyen les.",
-            "Gyors döntés lövésnél, kevés érintés.",
-            "Támadók háromszög-távolságban helyezkedjenek."
+            "Gyors átmenet védekezésből támadásba.",
+            "Bátor 1v1 vállalása az utolsó harmadban.",
+            "Kapura lövések minősége, döntéshozatal."
         ],
         "variations_hu": [
-            "Plusz védő érkezik hátulról késve.",
-            "Keresztlabda beadással kombinálva a szélről."
+            "Max. 3 érintés a középső zónában.",
+            "Extra pont fejessel szerzett gólért."
         ],
-        "image_url": ""
-    }
+    },
 ]
 
-# ======================================================
-# 2. SEGÉDFÜGGVÉNYEK – SZŰRÉS, STAGE SZCÓR
-# ======================================================
 
-def filter_exercises(
+# =====================================================
+# 1. SEGÉDFÜGGVÉNYEK – SZŰRÉS, VÁLASZTÁS, ACWR
+# =====================================================
+
+def smart_filter(
     db: List[Dict],
     age_group: str,
-    tactical: str,
-    technical: str,
-    physical_goal: str,
+    tactical_goal: str,
+    technical_goal: str,
+    fitness_goal: str,
     period_week: int,
+    stage: str,
 ) -> List[Dict]:
-    """Egyszerű szűrés – ha valamelyik mező 'Mind', azt kihagyjuk a szűrésből."""
-    result = []
-    for ex in db:
-        if age_group != "Mind" and ex["age_group_code"] != age_group:
-            continue
-        if tactical != "Mind" and ex["tactical_code"] != tactical:
-            continue
-        if technical != "Mind" and ex["technical_code"] != technical:
-            continue
-        if physical_goal != "Mind" and ex["physical_goal"] != physical_goal:
-            continue
-        if period_week != 0 and ex["period_week"] != period_week:
-            continue
-        result.append(ex)
-    return result
+    """
+    'Okos' szűrés: először megpróbál minden feltételt,
+    ha üres, akkor fokozatosan lazít (hogy mindig legyen gyakorlat).
+    """
+    def matches(ex: Dict, strict: bool) -> bool:
+        if stage and ex.get("stage_tag") != stage:
+            return False
+        if strict:
+            if age_group and ex.get("age_group") != age_group:
+                return False
+            if tactical_goal and ex.get("tactical_goal") != tactical_goal:
+                return False
+            if technical_goal and ex.get("technical_goal") != technical_goal:
+                return False
+            if fitness_goal and ex.get("fitness_goal") != fitness_goal:
+                return False
+            if period_week and ex.get("period_week") != period_week:
+                return False
+        return True
+
+    # 1) teljesen szigorú
+    strict_res = [ex for ex in db if matches(ex, strict=True)]
+    if strict_res:
+        return strict_res
+
+    # 2) csak korosztály + stage + erőnlét
+    loose_res = [
+        ex for ex in db
+        if ex.get("stage_tag") == stage
+        and (not age_group or ex.get("age_group") == age_group)
+        and (not fitness_goal or ex.get("fitness_goal") == fitness_goal)
+    ]
+    if loose_res:
+        return loose_res
+
+    # 3) utolsó fallback: csak stage
+    return [ex for ex in db if ex.get("stage_tag") == stage]
 
 
-def score_for_stage(ex: Dict, stage: str) -> int:
-    """Nagyon egyszerű pontozás, hogy eltérő blokkokba más-más típusú feladat kerüljön."""
-    score = 0
-    fmt = ex.get("format", "")
-    ex_type = ex.get("exercise_type", "").lower()
-    intensity = ex.get("intensity", "").lower()
-
-    if stage == "warmup":
-        if "v1" in fmt or ex_type in ["rondó", "rondo"]:
-            score += 3
-        if intensity in ["alacsony", "alacsony–közepes"]:
-            score += 2
-
-    elif stage == "small":
-        if "v1" in fmt or "v2" in fmt:
-            score += 2
-        if ex_type in ["small-sided game", "rondó", "rondo"]:
-            score += 2
-
-    elif stage == "large":
-        if "v4" in fmt or "v5" in fmt or "v6" in fmt:
-            score += 3
-        if ex_type in ["positional game"]:
-            score += 2
-
-    elif stage == "main":
-        if ex_type in ["game", "finishing"]:
-            score += 3
-        if intensity in ["magas"]:
-            score += 2
-
-    return score
+def pick_exercise_for_stage(
+    db: List[Dict],
+    age_group: str,
+    tactical_goal: str,
+    technical_goal: str,
+    fitness_goal: str,
+    period_week: int,
+    stage: str,
+) -> Dict:
+    candidates = smart_filter(
+        db, age_group, tactical_goal, technical_goal, fitness_goal, period_week, stage
+    )
+    if not candidates:
+        return {}
+    return random.choice(candidates)
 
 
-def pick_for_stage(candidates: List[Dict], used_ids: set, stage: str):
-    scored = []
-    for ex in candidates:
-        if ex["id"] in used_ids:
-            continue
-        s = score_for_stage(ex, stage)
-        if s > 0:
-            scored.append((s, ex))
-    if not scored:
-        return None
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top_score = scored[0][0]
-    best = [ex for s, ex in scored if s == top_score]
-    return random.choice(best)
+def demo_acwr_series(current_session_load: int) -> pd.DataFrame:
+    """
+    Egyszerű demo ACWR: 3 korábbi hét + aktuális edzés.
+    """
+    # krónikus terhelés (elmúlt 3 hét összterhelés)
+    past_weeks = [220, 260, 240]
+    acute = current_session_load
+    weeks = ["-3. hét", "-2. hét", "-1. hét", "Aktuális edzés"]
+
+    loads = past_weeks + [acute]
+    chronic_mean = sum(past_weeks) / len(past_weeks)
+    acwr_values = [round(l / chronic_mean, 2) for l in loads]
+
+    df = pd.DataFrame({"Hét": weeks, "Terhelés": loads, "ACWR": acwr_values})
+    return df
 
 
-# ======================================================
-# 3. PDF – SEGÉDFÜGGVÉNYEK
-# ======================================================
-
-def safe_wrap(text: str, max_len: int = 110) -> str:
-    """Ne legyen túl hosszú, egyben lévő sor (FPDF hibát dobna)."""
-    if not text:
-        return ""
-    words = text.split()
-    lines = []
-    current = []
-    length = 0
-    for w in words:
-        if length + len(w) + 1 > max_len:
-            lines.append(" ".join(current))
-            current = [w]
-            length = len(w)
-        else:
-            current.append(w)
-            length += len(w) + 1
-    if current:
-        lines.append(" ".join(current))
-    return "\n".join(lines)
-
+# =====================================================
+# 2. PDF – DEJAVU FONTOK, MAGYAR SZÖVEG
+# =====================================================
 
 class TrainingPDF(FPDF):
     def header(self):
-        self.set_font("DejaVu", "", 10)
-        self.cell(0, 6, "chatbotfootball – Training Blueprint", 0, 0, "L")
-        self.ln(10)
+        try:
+            self.set_font("DejaVu", "B", 14)
+        except:
+            self.set_font("Arial", "B", 14)
+        self.cell(0, 8, "Edzésterv – Training Blueprint", ln=1)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font("DejaVu", "", 8)
-        self.cell(0, 5, f"Oldal {self.page_no()}", 0, 0, "C")
+        try:
+            self.set_font("DejaVu", "", 9)
+        except:
+            self.set_font("Arial", "", 9)
+        self.cell(0, 10, "Generálva Training Blueprint alkalmazással", 0, 0, "C")
 
 
-def create_pdf(plan, plan_meta, coach_notes_for_pdf, exercise_notes_dict) -> bytes:
+def init_fonts(pdf: TrainingPDF):
+    """DejaVu fontok biztonságos regisztrálása."""
+    try:
+        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+    except:
+        pass
+    try:
+        pdf.add_font("DejaVu", "B", "DejaVuSans-Bold.ttf", uni=True)
+    except:
+        pass
+
+
+def multiline(pdf: TrainingPDF, txt: str):
+    """Biztonságos multi_cell, hogy ne dőljön el hosszú szavaknál sem."""
+    if not txt:
+        return
+    safe = txt.replace("\r", " ").replace("\n", " ")
+    try:
+        pdf.multi_cell(0, 6, safe)
+    except Exception:
+        pdf.multi_cell(0, 6, safe[:500] + " ...")
+
+
+def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: str, exercise_notes: Dict[str, str]) -> BytesIO:
     pdf = TrainingPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    # Unicode betűtípus
-    pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-    pdf.set_font("DejaVu", "", 12)
+    init_fonts(pdf)
 
-    # ----- Címlap / összefoglaló -----
+    # ---------- Címlap ----------
     pdf.add_page()
-    pdf.set_font("DejaVu", "", 20)
-    pdf.cell(0, 10, "Edzésterv", ln=1)
+    try:
+        pdf.set_font("DejaVu", "B", 18)
+    except:
+        pdf.set_font("Arial", "B", 18)
 
-    pdf.set_font("DejaVu", "", 11)
-    pdf.ln(4)
-    pdf.multi_cell(0, 6, safe_wrap(
-        f"Korosztály: {plan_meta['age_group']} | "
-        f"Taktikai cél: {plan_meta['tactical']} | "
-        f"Technikai fókusz: {plan_meta['technical']} | "
-        f"Erőnléti cél: {plan_meta['physical']} | "
-        f"Periodizációs hét: {plan_meta['period_week']}."
-    ))
-    pdf.ln(3)
-    pdf.multi_cell(0, 6, safe_wrap(f"Edző ID: {plan_meta['coach_id']}"))
-
-    if coach_notes_for_pdf:
-        pdf.ln(4)
-        pdf.set_font("DejaVu", "B", 11)
-        pdf.cell(0, 7, "Edzői megjegyzés az edzéshez:", ln=1)
-        pdf.set_font("DejaVu", "", 11)
-        pdf.multi_cell(0, 6, safe_wrap(coach_notes_for_pdf))
-
-    # ----- Blokkok -----
-    for idx, (stage_title, ex) in enumerate(plan, start=1):
-        pdf.add_page()
-        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-        pdf.add_font("DejaVu", "B", "DejaVuSans-Bold.ttf", uni=True)
+    pdf.cell(0, 10, "Edzésterv összefoglaló", ln=1)
+    try:
         pdf.set_font("DejaVu", "", 12)
+    except:
+        pdf.set_font("Arial", "", 12)
+
+    pdf.ln(2)
+    pdf.cell(0, 7, f"Korosztály: {plan_meta['age_group']}", ln=1)
+    pdf.cell(0, 7, f"Taktikai cél: {plan_meta['tactical_goal']}", ln=1)
+    pdf.cell(0, 7, f"Technikai cél: {plan_meta['technical_goal']}", ln=1)
+    pdf.cell(0, 7, f"Erőnléti cél: {plan_meta['fitness_goal']}", ln=1)
+    pdf.cell(0, 7, f"Periódizációs hét: {plan_meta['period_week']}", ln=1)
+    pdf.cell(0, 7, f"Edző ID: {plan_meta['coach_id']}", ln=1)
+
+    pdf.ln(4)
+    pdf.cell(0, 7, "Edzői megjegyzés az edzéshez:", ln=1)
+    multiline(pdf, coach_notes or "-")
+
+    # ---------- Blokkok ----------
+    for idx, block in enumerate(plan, start=1):
+        stage_title = block["stage_title"]
+        ex = block["exercise"]
+        ex_id = ex["id"]
+
+        pdf.add_page()
+        try:
+            pdf.set_font("DejaVu", "B", 14)
+        except:
+            pdf.set_font("Arial", "B", 14)
 
         pdf.cell(0, 8, f"{idx}. {stage_title}", ln=1)
-
-        pdf.set_font("DejaVu", "B", 11)
-        pdf.multi_cell(0, 6, safe_wrap(ex.get("title_hu", "")))
         pdf.ln(2)
 
-        pdf.set_font("DejaVu", "", 10)
-        meta_line = (
-            f"Formátum: {ex.get('format','')} | "
-            f"Típus: {ex.get('exercise_type','')} | "
-            f"Időtartam: {ex.get('duration_minutes','')} perc | "
-            f"Pályaméret: {ex.get('pitch_size','')}"
+        try:
+            pdf.set_font("DejaVu", "", 11)
+        except:
+            pdf.set_font("Arial", "", 11)
+
+        pdf.cell(0, 6, f"Cím: {ex['title_hu']}", ln=1)
+        pdf.cell(
+            0, 6,
+            f"Formátum: {ex['format']}   |   Típus: {ex['exercise_type']}   |   Időtartam: {ex['duration_min']} perc",
+            ln=1,
         )
-        pdf.multi_cell(0, 5, safe_wrap(meta_line))
+        pdf.cell(0, 6, f"Pályaméret: {ex['pitch_size']}   |   Intenzitás: {ex['intensity']}", ln=1)
+
+        pdf.ln(3)
+        pdf.cell(0, 6, "Szervezés:", ln=1)
+        multiline(pdf, ex["organisation_hu"])
+
         pdf.ln(2)
+        pdf.cell(0, 6, "Leírás / menet:", ln=1)
+        multiline(pdf, ex["description_hu"])
 
-        org = ex.get("organisation_hu", "")
-        if org:
-            pdf.set_font("DejaVu", "B", 11)
-            pdf.cell(0, 6, "Szervezés:", ln=1)
-            pdf.set_font("DejaVu", "", 10)
-            pdf.multi_cell(0, 5, safe_wrap(org))
+        pdf.ln(2)
+        pdf.cell(0, 6, "Coaching pontok:", ln=1)
+        bullet_text = "\n".join([f"• {c}" for c in ex["coaching_points_hu"]])
+        multiline(pdf, bullet_text)
+
+        if ex["variations_hu"]:
             pdf.ln(2)
-
-        desc = ex.get("description_hu", "")
-        if desc:
-            pdf.set_font("DejaVu", "B", 11)
-            pdf.cell(0, 6, "Leírás / menete:", ln=1)
-            pdf.set_font("DejaVu", "", 10)
-            pdf.multi_cell(0, 5, safe_wrap(desc))
-            pdf.ln(2)
-
-        cpts = ex.get("coaching_points_hu", [])
-        if cpts:
-            pdf.set_font("DejaVu", "B", 11)
-            pdf.cell(0, 6, "Coaching pontok:", ln=1)
-            pdf.set_font("DejaVu", "", 10)
-            for c in cpts:
-                pdf.multi_cell(0, 5, safe_wrap("• " + c))
-            pdf.ln(1)
-
-        vars_ = ex.get("variations_hu", [])
-        if vars_:
-            pdf.set_font("DejaVu", "B", 11)
             pdf.cell(0, 6, "Variációk:", ln=1)
-            pdf.set_font("DejaVu", "", 10)
-            for v in vars_:
-                pdf.multi_cell(0, 5, safe_wrap("• " + v))
-            pdf.ln(1)
+            var_text = "\n".join([f"• {v}" for v in ex["variations_hu"]])
+            multiline(pdf, var_text)
 
-        # Egyedi jegyzet ehhez a feladathoz
-        note = exercise_notes_dict.get(ex["id"])
-        if note:
-            pdf.ln(2)
-            pdf.set_font("DejaVu", "B", 11)
-            pdf.cell(0, 6, "Edzői jegyzet ehhez a gyakorlathoz:", ln=1)
-            pdf.set_font("DejaVu", "", 10)
-            pdf.multi_cell(0, 5, safe_wrap(note))
+        # Egyedi edzői megjegyzés ehhez a gyakorlathoz
+        note = exercise_notes.get(ex_id, "")
+        pdf.ln(3)
+        pdf.cell(0, 6, "Edzői megjegyzés ehhez a gyakorlathoz:", ln=1)
+        multiline(pdf, note or "-")
 
-    out = pdf.output(dest="S")  # fpdf2-ben ez már bytes
-    if isinstance(out, str):
-        out = out.encode("latin-1", "ignore")
-    return out
+    # ---------- PDF -> BytesIO ----------
+    raw = pdf.output(dest="S")
+    if isinstance(raw, str):
+        raw = raw.encode("latin-1", "ignore")
+    bio = BytesIO(raw)
+    bio.seek(0)
+    return bio
 
 
-# ======================================================
-# 4. STREAMLIT FELÜLET
-# ======================================================
+# =====================================================
+# 3. STREAMLIT UI – TRAINING BLUEPRINT
+# =====================================================
 
-st.set_page_config(page_title="Training Blueprint – chatbotfootball", layout="wide")
+st.set_page_config(page_title="Training Blueprint – edzéstervező", layout="wide")
 
-st.title("⚽ Training Blueprint – chatbotfootball edzésterv generátor")
+st.title("⚽ Training Blueprint – edzéstervező demó")
 
-st.markdown(
-    """
-Ez a verzió egy **beépített minta-adatbázisból** dolgozik (5 gyakorlat),  
-csak a folyamat és a logika kipróbálása miatt. Később ezt cseréljük majd a
-saját, több száz gyakorlatot tartalmazó JSON-adatbázisodra.
-"""
+st.write(
+    "Ez egy **demó verzió**, amely néhány példagyakorlatból generál edzéstervet "
+    "a megadott szűrők alapján. Később ide kerül majd a teljes, 300+ gyakorlatos adatbázis."
 )
 
-db = SAMPLE_EXERCISES
+# --- Szűrők / beállítások ---
 
-# -------- Oldalsáv: szűrők --------
-st.sidebar.header("Alapbeállítások")
+st.sidebar.header("Szűrés és beállítások")
 
-age_options = ["Mind"] + sorted({ex["age_group_code"] for ex in db})
-tactical_options = ["Mind"] + sorted({ex["tactical_code"] for ex in db})
-technical_options = ["Mind"] + sorted({ex["technical_code"] for ex in db})
-physical_options = ["Mind"] + sorted({ex["physical_goal"] for ex in db})
+age_group = st.sidebar.selectbox(
+    "Korosztály",
+    ["U7–U11", "U12–U15", "U16–U19"],
+    index=1,
+)
 
-age_sel = st.sidebar.selectbox("Korosztály", age_options, index=1)
-tactical_sel = st.sidebar.selectbox("Taktikai cél", tactical_options, index=1)
-technical_sel = st.sidebar.selectbox("Technikai fókusz", technical_options, index=1)
-physical_sel = st.sidebar.selectbox("Erőnléti cél", physical_options, index=0)
+tactical_goal = st.sidebar.selectbox(
+    "Taktikai cél",
+    [
+        "",
+        "labdabirtoklás",
+        "labdaszerzés / pressing",
+        "labdakihozatal / build-up",
+        "befejezés, gólhelyzet-teremtés",
+    ],
+    index=1,
+)
 
-period_week = st.sidebar.selectbox("Periodizációs hét (1–4 vagy Mind)", [0, 1, 2, 3, 4], index=1)
+technical_goal = st.sidebar.selectbox(
+    "Technikai cél",
+    [
+        "",
+        "rövid passzjáték",
+        "1v1 védekezés",
+        "1v1 támadás",
+        "befejezés technika",
+    ],
+    index=1,
+)
 
-coach_id = st.sidebar.text_input("Edző ID", "coach_1")
+fitness_goal = st.sidebar.selectbox(
+    "Erőnléti cél",
+    ["", "alacsony terhelés", "közepes terhelés", "magas terhelés"],
+    index=2,
+)
 
-st.sidebar.markdown("---")
-coach_notes = st.sidebar.text_area(
+period_week = st.sidebar.slider("Periódizációs hét (1–4)", min_value=1, max_value=4, value=1)
+
+coach_id = st.sidebar.text_input("Edző ID", value="coach_1")
+
+coach_notes = st.text_area(
     "Edzői megjegyzés az egész edzéshez",
-    "",
-    height=120,
-    placeholder="Ide írhatod a teljes edzésre vonatkozó gondolataidat…"
+    placeholder="Ide írhatod a teljes edzéshez kapcsolódó gondolataidat…",
 )
 
-generate_btn = st.sidebar.button("Edzésterv generálása")
+if "exercise_notes" not in st.session_state:
+    st.session_state["exercise_notes"] = {}
 
-# Session state: hogy a PDF-gomb külön is működjön, elmentjük a legutóbbi tervet
-if "last_plan" not in st.session_state:
-    st.session_state.last_plan = None
-if "last_plan_meta" not in st.session_state:
-    st.session_state.last_plan_meta = None
+generate = st.button("Edzésterv generálása")
 
-# -------- Fő logika: edzésterv generálása --------
-if generate_btn:
-    candidates = filter_exercises(
-        db,
-        age_group=age_sel,
-        tactical=tactical_sel,
-        technical=technical_sel,
-        physical_goal=physical_sel,
-        period_week=period_week,
-    )
+plan = []
+plan_meta = {
+    "age_group": age_group,
+    "tactical_goal": tactical_goal or "nincs megadva",
+    "technical_goal": technical_goal or "nincs megadva",
+    "fitness_goal": fitness_goal or "nincs megadva",
+    "period_week": period_week,
+    "coach_id": coach_id,
+}
 
-    if not candidates:
-        st.error("Nincs olyan gyakorlat, amely megfelel a szűrőknek.")
+if generate:
+    stages = [
+        ("warmup", "Bemelegítés"),
+        ("small", "Cél1 – kis létszámú taktikai játék"),
+        ("large", "Cél2 – nagyobb létszámú taktikai játék"),
+        ("main", "Cél3 – fő rész / mérkőzésjáték jellegű feladat"),
+    ]
+
+    for stage_tag, stage_title in stages:
+        ex = pick_exercise_for_stage(
+            DEMO_DB,
+            age_group=age_group,
+            tactical_goal=tactical_goal,
+            technical_goal=technical_goal,
+            fitness_goal=fitness_goal,
+            period_week=period_week,
+            stage=stage_tag,
+        )
+        if ex:
+            plan.append({"stage_tag": stage_tag, "stage_title": stage_title, "exercise": ex})
+
+    if not plan:
+        st.error("Nem találtam egyetlen gyakorlatsort sem – próbáld lazítani a szűrőket.")
     else:
-        used_ids = set()
-        plan = []
+        st.success("✅ Edzésterv generálva a fenti paraméterek alapján.")
+        st.session_state["plan"] = plan
+        st.session_state["plan_meta"] = plan_meta
+        st.session_state["coach_notes_for_pdf"] = coach_notes
 
-        stages = [
-            ("Bemelegítés", "warmup"),
-            ("Cél1 – kis létszámú játék", "small"),
-            ("Cél2 – nagyobb taktikai játék", "large"),
-            ("Cél3 – fő rész / meccsjáték jellegű", "main"),
-        ]
+# --------- Ha van mentett terv, megjelenítjük ---------
 
-        for title, code in stages:
-            ex = pick_for_stage(candidates, used_ids, code)
-            if ex:
-                used_ids.add(ex["id"])
-                plan.append((title, ex))
+if "plan" in st.session_state and st.session_state["plan"]:
+    plan = st.session_state["plan"]
+    plan_meta = st.session_state["plan_meta"]
 
-        if not plan:
-            st.error("Nem sikerült gyakorlatsort összeállítani a szűrők alapján.")
-        else:
-            # Mentjük a session_state-be a PDF-hez
-            st.session_state.last_plan = plan
-            st.session_state.last_plan_meta = {
-                "age_group": age_sel,
-                "tactical": tactical_sel,
-                "technical": technical_sel,
-                "physical": physical_sel,
-                "period_week": period_week,
-                "coach_id": coach_id,
-                "coach_notes": coach_notes,
-            }
-            st.success("✅ Edzésterv generálva a megadott paraméterek alapján.")
-
-# -------- Ha van elmentett terv, megjelenítjük --------
-plan = st.session_state.last_plan
-plan_meta = st.session_state.last_plan_meta
-
-if plan and plan_meta:
-    st.subheader("📋 Edzésterv összefoglaló")
+    st.header("📝 Edzésterv összefoglaló")
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown(f"**Korosztály:** {plan_meta['age_group']}")
-        st.markdown(f"**Taktikai cél:** {plan_meta['tactical']}")
+        st.metric("Korosztály", plan_meta["age_group"])
+        st.metric("Periódizációs hét", plan_meta["period_week"])
     with col2:
-        st.markdown(f"**Technikai fókusz:** {plan_meta['technical']}")
-        st.markdown(f"**Erőnléti cél:** {plan_meta['physical']}")
+        st.write("**Taktikai cél:**", plan_meta["tactical_goal"])
+        st.write("**Technikai cél:**", plan_meta["technical_goal"])
     with col3:
-        st.markdown(f"**Periodizációs hét:** {plan_meta['period_week']}")
-        st.markdown(f"**Edző ID:** `{plan_meta['coach_id']}`")
+        st.write("**Erőnléti cél:**", plan_meta["fitness_goal"])
+        st.write("**Edző ID:**", plan_meta["coach_id"])
 
-    if plan_meta["coach_notes"]:
-        st.markdown("**Edzői megjegyzés az egész edzéshez:**")
-        st.info(plan_meta["coach_notes"])
+    # --- ACWR demo ---
+    st.subheader("📊 Terhelés és ACWR (demó)")
 
-    st.markdown("---")
+    total_session_load = sum(ex["exercise"]["duration_min"] for ex in plan) * 10  # nagyon egyszerű becslés
+    acwr_df = demo_acwr_series(total_session_load)
+    st.caption("Az ACWR itt csak demo jellegű, később valós GPS / terhelésadatokra cseréljük.")
+    st.line_chart(acwr_df.set_index("Hét")[["Terhelés", "ACWR"]])
 
-    # Egyedi jegyzetek a gyakorlatokhoz
-    st.markdown("### Gyakorlatok részletesen")
+    # --- Blokkok részletesen ---
+    st.header("📚 Gyakorlatok blokkra bontva")
 
-    # exercise_notes: id -> szöveg
-    exercise_notes: Dict[str, str] = {}
+    for block in plan:
+        stage_title = block["stage_title"]
+        ex = block["exercise"]
+        ex_id = ex["id"]
 
-    for idx, (stage_title, ex) in enumerate(plan, start=1):
-        st.markdown(f"#### {idx}. {stage_title}")
-        c1, c2 = st.columns([1.1, 1.3])
+        st.subheader(stage_title)
+        st.markdown(f"**{ex['title_hu']}**")
+        st.write(
+            f"*Formátum:* {ex['format']}  |  *Típus:* {ex['exercise_type']}  |  "
+            f"*Időtartam:* {ex['duration_min']} perc  |  *Intenzitás:* {ex['intensity']}"
+        )
+        st.write(f"*Pályaméret:* {ex['pitch_size']}")
 
-        with c1:
-            st.markdown(f"**{ex.get('title_hu','')}**")
-            meta_txt = (
-                f"Formátum: `{ex.get('format','')}`  \n"
-                f"Típus: `{ex.get('exercise_type','')}`  \n"
-                f"Pályaméret: `{ex.get('pitch_size','')}`  \n"
-                f"Időtartam: `{ex.get('duration_minutes','')} perc`"
-            )
-            st.markdown(meta_txt)
+        with st.expander("Szervezés (HU)"):
+            st.write(ex["organisation_hu"])
 
-        with c2:
-            with st.expander("Szervezés (HU)"):
-                st.write(ex.get("organisation_hu", ""))
+        with st.expander("Leírás / menet (HU)"):
+            st.write(ex["description_hu"])
 
-            with st.expander("Leírás / menete (HU)"):
-                st.write(ex.get("description_hu", ""))
+        with st.expander("Coaching pontok (HU)"):
+            for c in ex["coaching_points_hu"]:
+                st.write("- " + c)
 
-            with st.expander("Coaching pontok (HU)"):
-                for c in ex.get("coaching_points_hu", []):
-                    st.write("• " + c)
+        with st.expander("Variációk (HU)"):
+            for v in ex["variations_hu"]:
+                st.write("- " + v)
 
-            with st.expander("Variációk (HU)"):
-                for v in ex.get("variations_hu", []):
-                    st.write("• " + v)
-
-        # Egyedi jegyzet textarea
-        note_key = f"note_{ex['id']}"
-        default_val = st.session_state.get(note_key, "")
-        note_val = st.text_area(
-            f"Edzői jegyzet ehhez a gyakorlathoz ({ex['id']})",
-            value=default_val,
+        # Egyedi edzői megjegyzés ehhez a gyakorlathoz
+        note_key = f"note_{ex_id}"
+        current_note = st.session_state["exercise_notes"].get(ex_id, "")
+        new_note = st.text_area(
+            f"Edzői megjegyzés ehhez a gyakorlathoz ({ex_id})",
+            value=current_note,
             key=note_key,
-            height=80
         )
-        exercise_notes[ex["id"]] = note_val
+        st.session_state["exercise_notes"][ex_id] = new_note
 
-        st.markdown("---")
+    # --------- PDF export ---------
+    st.header("📄 Magyar PDF export")
 
-    # ACWR / terhelés – nagyon egyszerű demo
-    st.subheader("📈 Terhelés / ACWR demo (heti összterhelés)")
-
-    # Dummy load: minden gyakorlat terhelése = duration_minutes * (1/2/3)
-    intensity_map = {"alacsony": 1, "alacsony–közepes": 1.5, "közepes": 2, "magas": 3}
-    total_load = 0
-    for _, ex in plan:
-        factor = intensity_map.get(ex.get("intensity", "").lower(), 2)
-        total_load += ex.get("duration_minutes", 15) * factor
-
-    # Session history coachonként
-    if "load_history" not in st.session_state:
-        st.session_state.load_history = []
-    st.session_state.load_history.append(float(total_load))
-    if len(st.session_state.load_history) > 6:
-        st.session_state.load_history = st.session_state.load_history[-6:]
-
-    load_values = st.session_state.load_history
-    weeks = list(range(1, len(load_values) + 1))
-    acwr_values = []
-    for i in range(len(load_values)):
-        acute = load_values[i]
-        chronic = sum(load_values[max(0, i-3):i+1]) / min(i+1, 4)
-        acwr = acute / chronic if chronic > 0 else 1
-        acwr_values.append(acwr)
-
-    acwr_data = {
-        "Hét": weeks,
-        "Heti terhelés": load_values,
-        "ACWR": acwr_values,
-    }
-    st.line_chart(acwr_data, x="Hét", y=["Heti terhelés", "ACWR"])
-
-    st.caption("Megjegyzés: ez csak demo-számítás, később integráljuk a valódi terhelésadatokat.")
-
-    # -------- PDF EXPORT --------
-    st.subheader("📄 Magyar PDF export")
-
-    try:
-        pdf_bytes = create_pdf(
-            plan=plan,
-            plan_meta=plan_meta,
-            coach_notes_for_pdf=plan_meta["coach_notes"],
-            exercise_notes_dict=exercise_notes
-        )
-
-        st.download_button(
-            label="📥 PDF generálása és letöltése",
-            data=pdf_bytes,
-            file_name="edzesterv_training_blueprint.pdf",
-            mime="application/pdf"
-        )
-    except Exception as e:
-        st.error(f"PDF generálási hiba: {e}")
-
+    if st.button("PDF generálása"):
+        try:
+            pdf_bytes = create_pdf(
+                plan=plan,
+                plan_meta=plan_meta,
+                coach_notes=st.session_state.get("coach_notes_for_pdf", ""),
+                exercise_notes=st.session_state["exercise_notes"],
+            )
+            st.download_button(
+                "📥 PDF letöltése",
+                data=pdf_bytes,
+                file_name="edzesterv_demo.pdf",
+                mime="application/pdf",
+            )
+        except Exception as e:
+            st.error(f"PDF generálási hiba: {e}")
 else:
-    st.info("Állítsd be a bal oldali szűrőket, majd kattints az **Edzésterv generálása** gombra.")
+    st.info("Kattints az **Edzésterv generálása** gombra a kezdéshez.")
