@@ -6,15 +6,14 @@ import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 
-from pitch_drawer import draw_drill
-from templates import TEMPLATES
+from pitch_drawer import draw_drill   # profi pályarajzoló
 
 
 # =====================================================
-# 0. DEMÓ DIAGRAM + DEMÓ ADATBÁZIS
+# 0. DEMÓ GYAKORLAT – RONDÓ
 # =====================================================
 
-Rondo4v2_DIAGRAM = {
+DEMO_RONDO_DIAGRAM = {
     "pitch": {"type": "full", "orientation": "horiz"},
     "players": [
         {"id": "A1", "label": "1", "x": 40, "y": 40, "team": "home"},
@@ -57,30 +56,17 @@ DEMO_DB: List[Dict[str, Any]] = [
         "fitness_goal": "alacsony terhelés",
         "period_week": 1,
         "stage_tag": "warmup",
-        "title_hu": "Bemelegítő rondó 4v2",
+        "title_hu": "Bemelegítő rondó",
         "format": "4v2",
         "exercise_type": "rondó",
         "duration_min": 15,
         "intensity": "alacsony–közepes",
         "pitch_size": "18×18 m",
-        "organisation_hu": (
-            "Négy támadó a négyzet sarkaiban, két védő középen. "
-            "Labdával rendelkező támadók két érintéssel játszanak."
-        ),
-        "description_hu": (
-            "A támadók célja a labda megtartása, gyors passzokkal. "
-            "A védők labdaszerzés után azonnal visszapasszolják kívülre."
-        ),
-        "coaching_points_hu": [
-            "Testhelyzet a labda fogadásához.",
-            "Kommunikáció – ki kér labdát?",
-            "Első érintés iránya kifelé a nyomásból.",
-        ],
-        "variations_hu": [
-            "Max. 2 érintés.",
-            "Labdaszerzés után 5 gyors passz = pont.",
-        ],
-        "diagram_v1": Rondo4v2_DIAGRAM,
+        "organisation_hu": "Demó bemelegítő rondó.",
+        "description_hu": "Demó leírás.",
+        "coaching_points_hu": ["Demó coaching pont 1", "Demó coaching pont 2"],
+        "variations_hu": [],
+        "diagram_v1": DEMO_RONDO_DIAGRAM,
     },
     {
         "id": "small_u12_pressing",
@@ -96,23 +82,10 @@ DEMO_DB: List[Dict[str, Any]] = [
         "duration_min": 20,
         "intensity": "közepes–magas",
         "pitch_size": "25×20 m",
-        "organisation_hu": (
-            "3v3 játék két neutrális támadóval, akik mindig labdát birtokló csapattal "
-            "játszanak. Játék két kis kapura."
-        ),
-        "description_hu": (
-            "A labdát vesztett csapat azonnal próbál visszatámadni (gegenpressing). "
-            "Cél: 5 passz vagy gól a kis kapukra."
-        ),
-        "coaching_points_hu": [
-            "Azonnali reakció labdavesztés után.",
-            "Testtartás 1v1 párharcban.",
-            "Neutrális játékosok helyezkedése passzsávokban.",
-        ],
-        "variations_hu": [
-            "Max. 3 érintés a neutrális játékosoknak.",
-            "Labdaszerzés után 5 másodpercen belül kapura lövés.",
-        ],
+        "organisation_hu": "Demó pressing kisjáték.",
+        "description_hu": "Demó leírás.",
+        "coaching_points_hu": ["Demó coaching pont 1"],
+        "variations_hu": [],
     },
     {
         "id": "large_u16_build_up",
@@ -128,23 +101,10 @@ DEMO_DB: List[Dict[str, Any]] = [
         "duration_min": 25,
         "intensity": "közepes",
         "pitch_size": "40×35 m",
-        "organisation_hu": (
-            "7 támadó a saját térfélen, 5 védő próbál labdát szerezni. "
-            "A cél: kijátszani a pressinget és átjátszani a középső zónát."
-        ),
-        "description_hu": (
-            "A támadó csapat felépíti a játékot hátulról, a labda kijuttatása a kijelölt "
-            "kapukon vagy célzónákon keresztül. Labdavesztéskor azonnali visszatámadás."
-        ),
-        "coaching_points_hu": [
-            "Hátsó lánc szélessége és mélysége.",
-            "Határozott első passz a kapustól.",
-            "Középpályások közti háromszögek kialakítása.",
-        ],
-        "variations_hu": [
-            "Időlimit a labdakihozatalra (pl. 10 másodperc).",
-            "Extra pont, ha a 6-os pozícióban lévő játékos ér labdához.",
-        ],
+        "organisation_hu": "Demó build-up játék.",
+        "description_hu": "Demó leírás.",
+        "coaching_points_hu": ["Demó coaching pont 1"],
+        "variations_hu": [],
     },
     {
         "id": "main_u16_game_like",
@@ -160,23 +120,10 @@ DEMO_DB: List[Dict[str, Any]] = [
         "duration_min": 30,
         "intensity": "magas",
         "pitch_size": "60×45 m",
-        "organisation_hu": (
-            "Szabályos mérkőzésjáték lerövidített pályán. "
-            "Mindkét csapat 8 mezőnyjátékossal és kapussal."
-        ),
-        "description_hu": (
-            "A hangsúly a gyors támadásbefejezéseken, sok kapura lövéssel. "
-            "Pontszám: gól + extra pont, ha 10 másodpercen belül befejezik a támadást."
-        ),
-        "coaching_points_hu": [
-            "Gyors átmenet védekezésből támadásba.",
-            "Bátor 1v1 vállalása az utolsó harmadban.",
-            "Kapura lövések minősége, döntéshozatal.",
-        ],
-        "variations_hu": [
-            "Max. 3 érintés a középső zónában.",
-            "Extra pont fejessel szerzett gólért.",
-        ],
+        "organisation_hu": "Demó mérkőzésjáték.",
+        "description_hu": "Demó leírás.",
+        "coaching_points_hu": ["Demó coaching pont 1"],
+        "variations_hu": [],
     },
 ]
 
@@ -256,56 +203,206 @@ def demo_acwr_series(current_session_load: int) -> pd.DataFrame:
     return df
 
 
-def create_exercise_from_template(
-    template_id: str,
-    title: str,
-    age_group: str,
-    fitness_goal: str,
-    period_week: int,
-    stage_tag: str,
-) -> Dict[str, Any]:
-    tpl = TEMPLATES[template_id]
-    base = tpl["diagram"]
-    meta = tpl.get("meta", {})
+# =====================================================
+# 2. RAJZ GENERÁLÓ – RONDÓ
+# =====================================================
 
-    ex = {
-        "id": f"template_{template_id}_{stage_tag}",
-        "age_group": age_group or meta.get("age_group", "U12–U15"),
-        "tactical_goal": "labdabirtoklás",
-        "technical_goal": "rövid passzjáték",
-        "fitness_goal": fitness_goal or "nincs megadva",
-        "period_week": period_week,
-        "stage_tag": stage_tag,
-        "title_hu": title or meta.get("label", "Sablon alapú gyakorlat"),
-        "format": "1–2–3–1",
-        "exercise_type": "game",
-        "duration_min": 20,
-        "intensity": "közepes",
-        "pitch_size": "kb. félpálya (55×35 m)",
-        "organisation_hu": (
-            "Félpályás játék 1–2–3–1 felállásban. "
-            "Mindkét csapat 1 kapus + 2 védő + 3 középpályás + 1 csatár szerkezetben helyezkedik el."
-        ),
-        "description_hu": (
-            "Folyamatos játék, amelyben a csapatok a kialakított szerkezetet tartva "
-            "próbálnak gólt szerezni. A labda a bal oldali csatárnál indul."
-        ),
-        "coaching_points_hu": [
-            "Távolságok a védelmi és középpályás vonalak között.",
-            "A középpálya háromszögei, elfordulások és vonalak közti mozgás.",
-            "A csatár visszalépése és mélységi befutásai.",
-        ],
-        "variations_hu": [
-            "Max. 3 érintés a középső zónában.",
-            "Labdaszerzés után 10 másodpercen belül befejezés.",
-        ],
-        "diagram_v1": base,
+def build_custom_rondo_diagram(
+    attackers: int,
+    defenders: int,
+    size_rel: int,
+    theme: str,
+) -> Dict[str, Any]:
+    """
+    Körülbelüli 0–100-as koordinátarendszerben rajzol rondót.
+    """
+    center_x, center_y = 50, 50
+    half = size_rel / 2
+
+    area = {
+        "x": center_x - half,
+        "y": center_y - half,
+        "w": size_rel,
+        "h": size_rel,
     }
-    return ex
+
+    players = []
+    cones = []
+
+    # támadók – sarkok + oldal-középsők
+    base_positions = [
+        (center_x - half, center_y - half),
+        (center_x + half, center_y - half),
+        (center_x + half, center_y + half),
+        (center_x - half, center_y + half),
+        (center_x, center_y - half),
+        (center_x, center_y + half),
+        (center_x - half, center_y),
+        (center_x + half, center_y),
+    ]
+    for i in range(attackers):
+        x, y = base_positions[i]
+        players.append({"id": f"A{i+1}", "label": str(i+1), "x": x, "y": y, "team": "home"})
+        cones.append({"x": x, "y": y})
+
+    # védők – középen kis „X” alakban
+    def_positions = [
+        (center_x - 3, center_y),
+        (center_x + 3, center_y),
+        (center_x, center_y + 3),
+        (center_x, center_y - 3),
+    ]
+    for j in range(defenders):
+        x, y = def_positions[j]
+        players.append({"id": f"D{j+1}", "label": "X", "x": x, "y": y, "team": "away"})
+
+    # labda
+    ball = {"owner_id": "A1"}
+
+    # passz-lánc
+    passes = []
+    attacker_ids = [f"A{i+1}" for i in range(attackers)]
+    for i in range(len(attacker_ids)):
+        from_id = attacker_ids[i]
+        to_id = attacker_ids[(i + 1) % len(attacker_ids)]
+        passes.append({"from_id": from_id, "to_id": to_id})
+
+    # futások – téma szerint
+    runs = []
+    if theme == "pressing":
+        for j in range(defenders):
+            runs.append({"from_id": f"D{j+1}", "to": {"x": center_x, "y": center_y}})
+    else:  # labdabirtoklás / possession
+        for i in range(min(3, attackers)):
+            pl = players[i]
+            runs.append({"from_id": pl["id"], "to": {"x": pl["x"] + 3, "y": pl["y"]}})
+
+    text_labels = [
+        {"x": 5, "y": 95, "text": f"Rondó {attackers}v{defenders} – {theme}"},
+    ]
+
+    return {
+        "pitch": {"type": "full", "orientation": "horiz"},
+        "players": players,
+        "cones": cones,
+        "ball": ball,
+        "area": area,
+        "passes": passes,
+        "runs": runs,
+        "text_labels": text_labels,
+        "mini_goals": [],
+    }
 
 
 # =====================================================
-# 2. PDF – DEJAVU FONTOK, MAGYAR SZÖVEG
+# 3. RAJZ GENERÁLÓ – FÉLPÁLYÁS JÁTÉK / FELÁLLÁS
+# =====================================================
+
+def _line_positions(x: float, n: int, y_min: float = 30, y_max: float = 70):
+    if n == 1:
+        return [(x, 50)]
+    step = (y_max - y_min) / (n - 1)
+    return [(x, y_min + i * step) for i in range(n)]
+
+
+def build_custom_halfpitch_game_diagram(
+    formation: str,
+    theme: str,
+) -> Dict[str, Any]:
+    """
+    Félpályás játék két csapattal – a formation string alapján (pl. '1-2-3-1').
+    1 kapus + sorok.
+    """
+    # egyszerűsített: 1 GK + N sor
+    try:
+        lines = [int(x) for x in formation.split("-")[1:]]  # GK után
+    except Exception:
+        lines = [2, 3, 1]  # fallback 1-2-3-1
+
+    # RED (home) balról támad jobbra
+    players = []
+
+    # Kapusok
+    players.append({"id": "R_GK", "label": "GK", "x": 10, "y": 50, "team": "keeper"})
+    players.append({"id": "B_GK", "label": "GK", "x": 90, "y": 50, "team": "keeper"})
+
+    # x-pozíciók sorokra (védők, kp, csatár)
+    line_x = [25, 45, 65, 80]  # annyit használunk, ahány sor van
+
+    # vörös csapat
+    red_ids = []
+    for idx, num in enumerate(lines):
+        x = line_x[idx]
+        for i, (px, py) in enumerate(_line_positions(x, num)):
+            pid = f"R_{idx}_{i}"
+            label = str(i + 2)  # csak hogy ne GK legyen
+            players.append({"id": pid, "label": label, "x": px, "y": py, "team": "home"})
+            red_ids.append(pid)
+
+    # kék csapat – tükrözés
+    blue_ids = []
+    for idx, num in enumerate(lines):
+        x = 100 - line_x[idx]
+        for i, (px, py) in enumerate(_line_positions(x, num)):
+            pid = f"B_{idx}_{i}"
+            label = str(i + 2)
+            players.append({"id": pid, "label": label, "x": px, "y": py, "team": "away"})
+            blue_ids.append(pid)
+
+    # labda + passz / futás téma szerint
+    passes = []
+    runs = []
+    ball = {}
+
+    if theme == "labdakihozatal / build-up":
+        ball = {"owner_id": "R_GK"}
+        # GK -> legközelebbi védő -> középpályás -> csatár
+        if red_ids:
+            first_line = [pid for pid in red_ids if pid.startswith("R_0_")]
+            second_line = [pid for pid in red_ids if pid.startswith("R_1_")]
+            third_line = [pid for pid in red_ids if pid.startswith("R_2_")]
+            chain = ["R_GK"]
+            if first_line:
+                chain.append(first_line[0])
+            if second_line:
+                chain.append(second_line[0])
+            if third_line:
+                chain.append(third_line[0])
+            for i in range(len(chain) - 1):
+                passes.append({"from_id": chain[i], "to_id": chain[i+1]})
+        # futások: szélsők felfutnak
+        for pid in red_ids[-2:]:
+            runs.append({"from_id": pid, "to": {"x": 72, "y": 55}})
+    elif theme == "pressing":
+        # labda a kék védőnél
+        ball = {"owner_id": blue_ids[0]} if blue_ids else {}
+        # pressing futások vörös csatártól / kp-tól
+        for pid in red_ids[-3:]:
+            runs.append({"from_id": pid, "to": {"x": 60, "y": 50}})
+    else:  # befejezés / általános
+        ball = {"owner_id": red_ids[-1]} if red_ids else {}
+        passes.append({"from_id": red_ids[-1], "to_id": "R_GK"})
+        runs.append({"from_id": red_ids[-1], "to": {"x": 85, "y": 50}})
+
+    text_labels = [
+        {"x": 5, "y": 95, "text": f"Félpályás játék – {formation}, téma: {theme}"},
+    ]
+
+    return {
+        "pitch": {"type": "full", "orientation": "horiz"},
+        "players": players,
+        "cones": [],
+        "ball": ball,
+        "area": None,
+        "passes": passes,
+        "runs": runs,
+        "text_labels": text_labels,
+        "mini_goals": [],
+    }
+
+
+# =====================================================
+# 4. PDF – MAGYAR EXPORT
 # =====================================================
 
 class TrainingPDF(FPDF):
@@ -398,7 +495,7 @@ def create_pdf(plan: List[Dict[str, Any]], plan_meta: Dict[str, Any],
         pdf.cell(0, 6, f"Cím: {ex['title_hu']}", ln=1)
         pdf.cell(
             0, 6,
-            f"Formátum: {ex['format']}   |   Típus: {ex['exercise_type']}   |   Időtartam: {ex['duration_min']} perc",
+            f"Formátum: {ex.get('format','')}   |   Típus: {ex['exercise_type']}   |   Időtartam: {ex['duration_min']} perc",
             ln=1,
         )
         pdf.cell(0, 6, f"Pályaméret: {ex['pitch_size']}   |   Intenzitás: {ex['intensity']}", ln=1)
@@ -436,7 +533,7 @@ def create_pdf(plan: List[Dict[str, Any]], plan_meta: Dict[str, Any],
 
 
 # =====================================================
-# 3. STREAMLIT UI
+# 5. STREAMLIT UI – EDZÉSTERV + INTERAKTÍV RAJZ KÉRDEZŐ
 # =====================================================
 
 st.set_page_config(page_title="Training Blueprint – edzéstervező", layout="wide")
@@ -444,11 +541,12 @@ st.set_page_config(page_title="Training Blueprint – edzéstervező", layout="w
 st.title("⚽ Training Blueprint – edzéstervező demó")
 
 st.write(
-    "Ez egy **demó verzió**, amely néhány példagyakorlatból, illetve egy "
-    "**pro 1–2–3–1 sablonból** generál edzéstervet a megadott szűrők alapján."
+    "A bal oldali szűrők alapján generálunk egy 4 blokkból álló edzéstervet. "
+    "Ezután megadhatod, **melyik gyakorlathoz szeretnél saját rajzot**, és "
+    "néhány kérdésre válaszolva az ábra ehhez igazodik."
 )
 
-# ---- Oldalsáv: edzés paraméterek ----
+# ---- Oldalsáv: általános edzés paraméterek ----
 
 st.sidebar.header("🎯 Edzés paraméterek")
 
@@ -495,13 +593,65 @@ period_week = st.sidebar.slider(
 coach_id = st.sidebar.text_input("Edző ID", value="coach_1")
 
 st.sidebar.markdown("---")
-selected_template_id = st.sidebar.selectbox(
-    "B megoldás – sablon használata",
-    ["(nincs sablon)"] + list(TEMPLATES.keys()),
-    index=0,
-)
-if selected_template_id == "(nincs sablon)":
-    selected_template_id = None
+st.sidebar.header("🖼 Saját rajz beállításai")
+
+use_custom_diagram = st.sidebar.checkbox("Saját rajz egy kiválasztott gyakorlathoz")
+
+custom_config = None
+selected_stage_tag = None
+
+if use_custom_diagram:
+    stage_label_to_tag = {
+        "Bemelegítés": "warmup",
+        "Cél1 – kis játék": "small",
+        "Cél2 – nagyobb játék": "large",
+        "Cél3 – fő rész / meccsjáték": "main",
+    }
+    stage_label = st.sidebar.selectbox(
+        "Melyik gyakorlathoz rajzoljunk?",
+        list(stage_label_to_tag.keys()),
+        index=0,
+    )
+    selected_stage_tag = stage_label_to_tag[stage_label]
+
+    drill_type = st.sidebar.radio(
+        "Gyakorlat típusa",
+        ["Rondó", "Játék / mérkőzés"],
+        index=0,
+    )
+
+    if drill_type == "Rondó":
+        attackers = st.sidebar.slider("Támadók száma", 3, 8, 4)
+        defenders = st.sidebar.slider("Védők száma", 1, 4, 2)
+        size_rel = st.sidebar.slider("Négyzet mérete (relatív)", 12, 30, 18)
+        theme_rondo = st.sidebar.selectbox(
+            "Fő téma",
+            ["labdabirtoklás", "pressing"],
+            index=0,
+        )
+        custom_config = {
+            "type": "rondo",
+            "attackers": attackers,
+            "defenders": defenders,
+            "size_rel": size_rel,
+            "theme": theme_rondo,
+        }
+    else:
+        formation = st.sidebar.selectbox(
+            "Felállási forma (1 + sorok)",
+            ["1-2-3-1", "1-3-2-1", "1-2-2-2"],
+            index=0,
+        )
+        theme_game = st.sidebar.selectbox(
+            "Téma",
+            ["labdakihozatal / build-up", "pressing", "befejezés"],
+            index=0,
+        )
+        custom_config = {
+            "type": "game",
+            "formation": formation,
+            "theme": theme_game,
+        }
 
 coach_notes = st.text_area(
     "🧠 Edzői megjegyzés az egész edzéshez",
@@ -532,33 +682,38 @@ if generate:
     ]
 
     for stage_tag, stage_title in stages:
-        ex = None
+        ex = pick_exercise_for_stage(
+            DEMO_DB,
+            age_group=age_group,
+            tactical_goal=tactical_goal,
+            technical_goal=technical_goal,
+            fitness_goal=fitness_goal,
+            period_week=period_week,
+            stage=stage_tag,
+        )
 
-        # 1) Sablon, ha van kiválasztva, és ide ajánlott
-        if selected_template_id is not None:
-            tpl_meta = TEMPLATES[selected_template_id]["meta"]
-            recommended_stage = tpl_meta.get("recommended_stage", None)
-            if recommended_stage is None or recommended_stage == stage_tag:
-                ex = create_exercise_from_template(
-                    template_id=selected_template_id,
-                    title="",
-                    age_group=age_group,
-                    fitness_goal=fitness_goal,
-                    period_week=period_week,
-                    stage_tag=stage_tag,
+        # ---- ha ez az a blokk, amihez saját rajzot kérsz, akkor felülírjuk a diagramot ----
+        if use_custom_diagram and custom_config and stage_tag == selected_stage_tag:
+            if custom_config["type"] == "rondo":
+                diag = build_custom_rondo_diagram(
+                    attackers=custom_config["attackers"],
+                    defenders=custom_config["defenders"],
+                    size_rel=custom_config["size_rel"],
+                    theme=custom_config["theme"],
                 )
-
-        # 2) Ha nem sablon, akkor demó adatbázis
-        if ex is None:
-            ex = pick_exercise_for_stage(
-                DEMO_DB,
-                age_group=age_group,
-                tactical_goal=tactical_goal,
-                technical_goal=technical_goal,
-                fitness_goal=fitness_goal,
-                period_week=period_week,
-                stage=stage_tag,
-            )
+                ex["diagram_v1"] = diag
+                ex["exercise_type"] = "rondó"
+                ex["format"] = f"{custom_config['attackers']}v{custom_config['defenders']}"
+                ex["title_hu"] = f"Saját rondó {ex['format']}"
+            else:
+                diag = build_custom_halfpitch_game_diagram(
+                    formation=custom_config["formation"],
+                    theme=custom_config["theme"],
+                )
+                ex["diagram_v1"] = diag
+                ex["exercise_type"] = "game"
+                ex["format"] = custom_config["formation"]
+                ex["title_hu"] = f"Saját játék – {custom_config['formation']}"
 
         if ex:
             plan.append({"stage_tag": stage_tag, "stage_title": stage_title, "exercise": ex})
@@ -611,7 +766,7 @@ if "plan" in st.session_state and st.session_state["plan"]:
             st.pyplot(fig, use_container_width=True)
 
         st.write(
-            f"*Formátum:* {ex['format']}  |  *Típus:* {ex['exercise_type']}  |  "
+            f"*Formátum:* {ex.get('format','')}  |  *Típus:* {ex['exercise_type']}  |  "
             f"*Időtartam:* {ex['duration_min']} perc  |  *Intenzitás:* {ex['intensity']}"
         )
         st.write(f"*Pályaméret:* {ex['pitch_size']}")
