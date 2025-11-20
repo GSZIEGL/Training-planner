@@ -1,5 +1,3 @@
-# pitch_drawer.py
-
 from typing import Dict, Any, List, Optional
 
 import matplotlib.pyplot as plt
@@ -19,6 +17,7 @@ def draw_pitch(ax=None):
     else:
         fig = ax.figure
 
+    # Zöld háttér
     ax.set_facecolor("#3a7d3a")
 
     # Külső vonal
@@ -57,7 +56,7 @@ def draw_pitch(ax=None):
     ax.scatter([11], [50], color="white", s=20)
     ax.scatter([89], [50], color="white", s=20)
 
-    # Kapuk
+    # Kapuk (vonalas jelzés)
     ax.plot([0, 0], [44, 56], color="white", linewidth=4)
     ax.plot([100, 100], [44, 56], color="white", linewidth=4)
 
@@ -89,18 +88,23 @@ def _get_player_by_id(players: List[Dict[str, Any]], pid: str) -> Optional[Dict[
     return None
 
 
-def _get_point(players, spec, key):
+def _get_point(players: List[Dict[str, Any]], spec: Dict[str, Any], key: str):
     """
     Visszaad egy (x, y) pontot játékos ID-ból vagy explicit koordinátából.
+    - "{key}_id": játékos azonosító (pl. from_id, to_id)
+    - "{key}":   dict {"x": .., "y": ..}
     """
-    if f"{key}_id" in spec:
-        pl = _get_player_by_id(players, spec[f"{key}_id"])
+    id_key = f"{key}_id"
+    if id_key in spec:
+        pl = _get_player_by_id(players, spec[id_key])
         if pl:
             return {"x": pl["x"], "y": pl["y"]}
+
     if key in spec and isinstance(spec[key], dict):
         pt = spec[key]
         if "x" in pt and "y" in pt:
             return {"x": pt["x"], "y": pt["y"]}
+
     return None
 
 
@@ -113,7 +117,17 @@ def draw_drill(diagram: Dict[str, Any],
                show: bool = False,
                save_path: Optional[str] = None):
     """
-    Megrajzolja a pályát + játékosokat + passzokat + futásokat.
+    Megrajzolja a pályát + játékosokat + passzokat + futásokat + extra elemeket.
+
+    diagram elvárt kulcsai (nem mind kötelező):
+      - players:  [{id, label, x, y, team}]
+      - cones:    [{x, y}]
+      - passes:   [{from_id/to_id vagy from/to koordináta}]
+      - runs:     [{from_id/to_id vagy from/to koordináta}]
+      - ball:     {owner_id vagy x,y}
+      - text_labels: [{x, y, text}]
+      - area:     {x, y, w, h}        # kiemelt játéktér
+      - mini_goals: [{x, y, w, h}]    # kis kapuk
     """
     fig, ax = plt.subplots(figsize=figsize)
     draw_pitch(ax)
@@ -124,19 +138,41 @@ def draw_drill(diagram: Dict[str, Any],
     runs = diagram.get("runs", [])
     ball_spec = diagram.get("ball", {})
     texts = diagram.get("text_labels", [])
+    area = diagram.get("area")
+    mini_goals = diagram.get("mini_goals", [])
 
-    # ---- Játékosok ----
-    for p in players:
-        x, y = p["x"], p["y"]
-        label = p.get("label", "")
-        color = TEAM_COLORS.get(p.get("team", "home"), "#1f77b4")
+    # ---- Kiemelt játéktér (pl. kisjáték mező) ----
+    if area:
+        ax.add_patch(
+            Rectangle(
+                (area["x"], area["y"]),
+                area["w"],
+                area["h"],
+                linewidth=1.5,
+                edgecolor="white",
+                linestyle="--",
+                facecolor="none",
+                zorder=1.5,
+            )
+        )
 
-        circ = Circle((x, y), 3, facecolor=color, edgecolor="black",
-                      linewidth=1.2, zorder=5)
-        ax.add_patch(circ)
-
-        ax.text(x, y, label, ha="center", va="center",
-                fontsize=7, color="black", zorder=6)
+    # ---- Mini-kapuk ----
+    for g in mini_goals:
+        gx = g["x"]
+        gy = g["y"]
+        gw = g.get("w", 4)
+        gh = g.get("h", 8)
+        ax.add_patch(
+            Rectangle(
+                (gx - gw / 2, gy - gh / 2),
+                gw,
+                gh,
+                linewidth=2,
+                edgecolor="white",
+                facecolor="#111827",
+                zorder=4,
+            )
+        )
 
     # ---- Bóják ----
     for c in cones:
@@ -146,7 +182,25 @@ def draw_drill(diagram: Dict[str, Any],
                          linewidth=1, zorder=4)
         ax.add_patch(cone)
 
-    # ---- Passzok ----
+    # ---- Játékosok ----
+    for p in players:
+        x, y = p["x"], p["y"]
+        label = p.get("label", "")
+        color = TEAM_COLORS.get(p.get("team", "home"), "#1f77b4")
+
+        circ = Circle((x, y), 3,
+                      facecolor=color,
+                      edgecolor="black",
+                      linewidth=1.2,
+                      zorder=5)
+        ax.add_patch(circ)
+
+        ax.text(x, y, label,
+                ha="center", va="center",
+                fontsize=7, color="black",
+                zorder=6)
+
+    # ---- Passzok (folyamatos fehér nyíl) ----
     for ps in passes:
         start = _get_point(players, ps, "from")
         end = _get_point(players, ps, "to")
@@ -165,7 +219,7 @@ def draw_drill(diagram: Dict[str, Any],
         )
         ax.add_patch(arrow)
 
-    # ---- Futásvonalak ----
+    # ---- Futásvonalak (szaggatott fehér nyíl) ----
     for rn in runs:
         start = _get_point(players, rn, "from")
         end = _get_point(players, rn, "to")
@@ -194,8 +248,10 @@ def draw_drill(diagram: Dict[str, Any],
 
     if ball_x is not None and ball_y is not None:
         ball = Circle((ball_x, ball_y), 1.5,
-                      facecolor="white", edgecolor="black",
-                      linewidth=1.2, zorder=7)
+                      facecolor="white",
+                      edgecolor="black",
+                      linewidth=1.2,
+                      zorder=7)
         ax.add_patch(ball)
 
     # ---- Szövegcímkék ----
