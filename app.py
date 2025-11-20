@@ -268,11 +268,72 @@ PERIODIZATION_PROFILES: Dict[str, List[Dict[str, str]]] = {
 }
 
 
-def get_periodization_table(age_group: str) -> pd.DataFrame | None:
+def get_week_focus(age_group: str, week: int) -> str:
+    # Alapértelmezett szöveg
+    default = "Általános edzésfókusz a korosztály szintjén."
+
+    # Utánpótlás
+    if age_group in ["U7–U11", "U12–U15", "U16–U19"]:
+        youth_map = {
+            1: "1. hét: alap technikai és játékfókusz, kisebb intenzitással.",
+            2: "2. hét: taktikai elvek erősítése, több szervezett kis- és nagypályás játék.",
+            3: "3. hét: intenzívebb terhelés, nagyobb létszámú játékok, pressing / átmenetek.",
+            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevétele.",
+        }
+        return youth_map.get(week, default)
+
+    # Felnőtt amatőr
+    if age_group == "Felnőtt amatőr":
+        amatőr_map = {
+            1: "1. hét: általános állóképesség és alap taktikai szervezettség.",
+            2: "2. hét: intenzívebb játékok, több pressing / átmenet.",
+            3: "3. hét: csúcsterhelés a rendelkezésre álló időkeret mellett.",
+            4: "4. hét: terhelés kismértékű csökkentése, meccsre hangolás.",
+        }
+        return amatőr_map.get(week, default)
+
+    # Felnőtt félprofi
+    if age_group == "Felnőtt félprofi":
+        félprofi_map = {
+            1: "1. hét: terhelés felépítése, alap taktikai fókusz (védekezési elvek).",
+            2: "2. hét: nagyobb intenzitás, pressing és build-up hangsúllyal.",
+            3: "3. hét: csúcsterhelés, meccsintenzitás modellezése edzésen.",
+            4: "4. hét: visszaterhelés, frissítés, ellenfélre szabott taktikai finomhangolás.",
+        }
+        return félprofi_map.get(week, default)
+
+    # Felnőtt profi
+    if age_group == "Felnőtt profi":
+        profi_map = {
+            1: "1. hét: alap ritmus felvétele, csapatszintű alapelvek frissítése.",
+            2: "2. hét: taktikai részletek, specifikus pressing / build-up fázisok magas intenzitáson.",
+            3: "3. hét: csúcsintenzitás, meccsprofil szimulálása, ACWR figyelembevételével.",
+            4: "4. hét: tapering, frissítés, mérkőzésfókuszú edzésstruktúra.",
+        }
+        return profi_map.get(week, default)
+
+    return default
+
+
+def get_periodization_table(age_group: str, week: int):
+    """
+    Visszaadja a korosztály / szint periodizációs táblázatát,
+    az elejére beszúrva a konkrét hét (mikrociklus) fókuszát.
+    """
     rows = PERIODIZATION_PROFILES.get(age_group)
     if not rows:
         return None
-    return pd.DataFrame(rows)
+
+    base_df = pd.DataFrame(rows)
+    focus_text = get_week_focus(age_group, week)
+
+    week_row = pd.DataFrame(
+        [{"Terület": "Mikrociklus fókusza", "Fókusz": focus_text}]
+    )
+
+    df = pd.concat([week_row, base_df], ignore_index=True)
+    return df
+
 
 
 # =====================================================
@@ -902,7 +963,11 @@ if "plan" in st.session_state and st.session_state["plan"]:
 
     # 🔹 Periodizációs táblázat
     st.subheader("📋 Periodizációs fókusz a kiválasztott korosztályra / szintre")
-    period_df = get_periodization_table(plan_meta["age_group"])
+   period_df = get_periodization_table(
+    plan_meta["age_group"],
+    plan_meta["period_week"],
+)
+
     if period_df is not None:
         st.table(period_df)
     else:
