@@ -1,16 +1,16 @@
 import random
 from io import BytesIO
-from typing import List, Dict
+from typing import List, Dict, Any
 
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 
-from pitch_drawer import draw_drill  # <-- ÚJ: rajzoló modul importja
+from pitch_drawer import draw_drill  # koordinátás rajzoló modul
 
 
 # =====================================================
-# 0. DIAGRAM – 4v2 RONDÓ DEMO SPEC
+# 0. DIAGRAM – FIX DEMÓ 4v2 RONDÓ (MEGMARAD)
 # =====================================================
 
 Rondo4v2_DIAGRAM = {
@@ -19,12 +19,10 @@ Rondo4v2_DIAGRAM = {
         "orientation": "horiz",
     },
     "players": [
-        # támadók – négyzet sarkai
         {"id": "A1", "label": "1", "x": 35, "y": 40, "team": "home"},
         {"id": "A2", "label": "2", "x": 65, "y": 40, "team": "home"},
         {"id": "A3", "label": "3", "x": 35, "y": 60, "team": "home"},
         {"id": "A4", "label": "4", "x": 65, "y": 60, "team": "home"},
-        # védők – középen
         {"id": "D1", "label": "X", "x": 48, "y": 50, "team": "away"},
         {"id": "D2", "label": "X", "x": 52, "y": 50, "team": "away"},
     ],
@@ -52,7 +50,7 @@ Rondo4v2_DIAGRAM = {
 
 
 # =====================================================
-# 0. DEMÓ ADATBÁZIS – KÉSŐBB CSERÉLHETŐ A VALÓDI JSON-RA
+# 0/b DEMÓ ADATBÁZIS – KÉSŐBB CSERÉLHETŐ A VALÓDI JSON-RA
 # =====================================================
 
 DEMO_DB: List[Dict] = [
@@ -88,7 +86,7 @@ DEMO_DB: List[Dict] = [
             "Max. 2 érintés.",
             "Labdaszerzés után 5 gyors passz = pont."
         ],
-        "diagram_v1": Rondo4v2_DIAGRAM,  # <-- ÚJ: taktikai ábra
+        "diagram_v1": Rondo4v2_DIAGRAM,
     },
 
     # -------- Kis létszámú taktikai játék --------
@@ -208,10 +206,6 @@ def smart_filter(
     period_week: int,
     stage: str,
 ) -> List[Dict]:
-    """
-    'Okos' szűrés: először megpróbál minden feltételt,
-    ha üres, akkor fokozatosan lazít (hogy mindig legyen gyakorlat).
-    """
     def matches(ex: Dict, strict: bool) -> bool:
         if stage and ex.get("stage_tag") != stage:
             return False
@@ -228,12 +222,10 @@ def smart_filter(
                 return False
         return True
 
-    # 1) teljesen szigorú
     strict_res = [ex for ex in db if matches(ex, strict=True)]
     if strict_res:
         return strict_res
 
-    # 2) csak korosztály + stage + erőnlét
     loose_res = [
         ex for ex in db
         if ex.get("stage_tag") == stage
@@ -243,7 +235,6 @@ def smart_filter(
     if loose_res:
         return loose_res
 
-    # 3) utolsó fallback: csak stage
     return [ex for ex in db if ex.get("stage_tag") == stage]
 
 
@@ -265,10 +256,6 @@ def pick_exercise_for_stage(
 
 
 def demo_acwr_series(current_session_load: int) -> pd.DataFrame:
-    """
-    Egyszerű demo ACWR: 3 korábbi hét + aktuális edzés.
-    """
-    # krónikus terhelés (elmúlt 3 hét összterhelés)
     past_weeks = [220, 260, 240]
     acute = current_session_load
     weeks = ["-3. hét", "-2. hét", "-1. hét", "Aktuális edzés"]
@@ -279,6 +266,156 @@ def demo_acwr_series(current_session_load: int) -> pd.DataFrame:
 
     df = pd.DataFrame({"Hét": weeks, "Terhelés": loads, "ACWR": acwr_values})
     return df
+
+
+# =====================================================
+# 1/b SAJÁT RONDÓ GENERÁLÓ
+# =====================================================
+
+def generate_rondo_diagram(
+    attackers: int,
+    defenders: int,
+    size_units: int,
+    show_cones: bool,
+    title: str,
+) -> Dict[str, Any]:
+    """
+    Egyszerű rondó generátor 0–100-as pályán, középen egy négyzettel.
+    attackers: külső játékosok (3–6)
+    defenders: középen (1–3)
+    size_units: négyzet fele (kb. 10–30)
+    """
+    center_x, center_y = 50, 50
+    half = size_units / 2
+
+    # sarok + oldal pozíciók támadóknak (max 6 hely)
+    positions = [
+        (center_x - half, center_y - half),  # bal alsó
+        (center_x + half, center_y - half),  # jobb alsó
+        (center_x + half, center_y + half),  # jobb felső
+        (center_x - half, center_y + half),  # bal felső
+        (center_x, center_y + half),         # felső közép
+        (center_x, center_y - half),         # alsó közép
+    ]
+    positions = positions[:attackers]
+
+    players = []
+    cones = []
+
+    for i, (x, y) in enumerate(positions, start=1):
+        players.append(
+            {"id": f"A{i}", "label": str(i), "x": x, "y": y, "team": "home"}
+        )
+        if show_cones:
+            cones.append({"x": x, "y": y})
+
+    # védők – kicsit eltolva a középpont körül
+    def_positions = [
+        (center_x - 2, center_y),
+        (center_x + 2, center_y),
+        (center_x, center_y + 3),
+    ]
+    def_positions = def_positions[:defenders]
+    for j, (x, y) in enumerate(def_positions, start=1):
+        players.append(
+            {"id": f"D{j}", "label": "X", "x": x, "y": y, "team": "away"}
+        )
+
+    ball = {"owner_id": "A1"}
+
+    # passzok – lánc A1→A2→...→A1
+    passes = []
+    attacker_ids = [f"A{i}" for i in range(1, attackers + 1)]
+    for i in range(len(attacker_ids)):
+        from_id = attacker_ids[i]
+        to_id = attacker_ids[(i + 1) % len(attacker_ids)]
+        passes.append({"from_id": from_id, "to_id": to_id})
+
+    # futások – védők enyhén kifelé
+    runs = []
+    for j in range(1, defenders + 1):
+        from_id = f"D{j}"
+        base = next(p for p in players if p["id"] == from_id)
+        runs.append(
+            {"from_id": from_id, "to": {"x": base["x"] + 5, "y": base["y"] + 3}}
+        )
+
+    text_labels = [
+        {"x": 5, "y": 95, "text": title},
+    ]
+
+    return {
+        "pitch": {"type": "full", "orientation": "horiz"},
+        "players": players,
+        "ball": ball,
+        "cones": cones,
+        "passes": passes,
+        "runs": runs,
+        "text_labels": text_labels,
+    }
+
+
+def create_custom_rondo_exercise(
+    title: str,
+    age_group: str,
+    fitness_goal: str,
+    period_week: int,
+    stage_tag: str,
+    attackers: int,
+    defenders: int,
+    size_m: int,
+    duration_min: int,
+    intensity: str,
+    show_cones: bool,
+) -> Dict[str, Any]:
+    """
+    Létrehoz egy teljes gyakorlati objektumot (mint a DEMO_DB), saját rondóhoz.
+    """
+    diagram = generate_rondo_diagram(
+        attackers=attackers,
+        defenders=defenders,
+        size_units=size_m,   # itt csak relatív, a pályán jól fog kinézni
+        show_cones=show_cones,
+        title=title,
+    )
+
+    exercise_id = f"custom_rondo_{stage_tag}"
+
+    ex = {
+        "id": exercise_id,
+        "age_group": age_group,
+        "tactical_goal": "labdabirtoklás",
+        "technical_goal": "rövid passzjáték",
+        "fitness_goal": fitness_goal or "nincs megadva",
+        "period_week": period_week,
+        "stage_tag": stage_tag,
+        "title_hu": title,
+        "format": f"{attackers}v{defenders}",
+        "exercise_type": "rondó",
+        "duration_min": duration_min,
+        "intensity": intensity,
+        "pitch_size": f"{size_m}×{size_m} m",
+        "organisation_hu": (
+            f"{attackers} támadó a négyzet oldalain/sarkaiban, "
+            f"{defenders} védő középen. A támadók célja a labda megtartása."
+        ),
+        "description_hu": (
+            "Folyamatos játék időre. A labdát birtokló csapat gyors passzokkal "
+            "próbálja játékban tartani a labdát, védők labdaszerzés után azonnal "
+            "visszajuttatják a támadóknak."
+        ),
+        "coaching_points_hu": [
+            "Testhelyzet a labda fogadásához.",
+            "Első érintés iránya a nyomásból kifelé.",
+            "Kommunikáció a pozíciók és passzvonalak között.",
+        ],
+        "variations_hu": [
+            "Max. 2 érintés a támadóknak.",
+            "Labdaszerzés után 5 gyors passz = pont.",
+        ],
+        "diagram_v1": diagram,
+    }
+    return ex
 
 
 # =====================================================
@@ -303,7 +440,6 @@ class TrainingPDF(FPDF):
 
 
 def init_fonts(pdf: TrainingPDF):
-    """DejaVu fontok biztonságos regisztrálása."""
     try:
         pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
     except:
@@ -315,7 +451,6 @@ def init_fonts(pdf: TrainingPDF):
 
 
 def multiline(pdf: TrainingPDF, txt: str):
-    """Biztonságos multi_cell, hogy ne dőljön el hosszú szavaknál sem."""
     if not txt:
         return
     safe = txt.replace("\r", " ").replace("\n", " ")
@@ -330,7 +465,6 @@ def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: str, exercise_not
     pdf.set_auto_page_break(auto=True, margin=15)
     init_fonts(pdf)
 
-    # ---------- Címlap ----------
     pdf.add_page()
     try:
         pdf.set_font("DejaVu", "B", 18)
@@ -355,7 +489,6 @@ def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: str, exercise_not
     pdf.cell(0, 7, "Edzői megjegyzés az edzéshez:", ln=1)
     multiline(pdf, coach_notes or "-")
 
-    # ---------- Blokkok ----------
     for idx, block in enumerate(plan, start=1):
         stage_title = block["stage_title"]
         ex = block["exercise"]
@@ -402,13 +535,11 @@ def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: str, exercise_not
             var_text = "\n".join([f"• {v}" for v in ex["variations_hu"]])
             multiline(pdf, var_text)
 
-        # Egyedi edzői megjegyzés ehhez a gyakorlathoz
         note = exercise_notes.get(ex_id, "")
         pdf.ln(3)
         pdf.cell(0, 6, "Edzői megjegyzés ehhez a gyakorlathoz:", ln=1)
         multiline(pdf, note or "-")
 
-    # ---------- PDF -> BytesIO ----------
     raw = pdf.output(dest="S")
     if isinstance(raw, str):
         raw = raw.encode("latin-1", "ignore")
@@ -474,6 +605,52 @@ period_week = st.sidebar.slider("Periódizációs hét (1–4)", min_value=1, ma
 
 coach_id = st.sidebar.text_input("Edző ID", value="coach_1")
 
+# --- SAJÁT RONDÓ GYAKORLAT BEKAPCSOLÁSA ---
+
+st.sidebar.markdown("---")
+use_custom_rondo = st.sidebar.checkbox("➕ Saját rondó gyakorlat hozzáadása")
+
+custom_rondo_params = None
+if use_custom_rondo:
+    st.sidebar.markdown("**Saját rondó beállításai**")
+
+    stage_label_to_tag = {
+        "Bemelegítés": "warmup",
+        "Cél1 – kis létszámú játék": "small",
+        "Cél2 – nagyobb létszámú játék": "large",
+        "Cél3 – fő rész / mérkőzésjáték": "main",
+    }
+    stage_label = st.sidebar.selectbox(
+        "Melyik blokk legyen a rondó?",
+        list(stage_label_to_tag.keys()),
+        index=0,
+    )
+    custom_stage_tag = stage_label_to_tag[stage_label]
+
+    custom_title = st.sidebar.text_input("Rondó neve", "Saját rondó")
+
+    attackers = st.sidebar.slider("Támadók (külső játékosok)", 3, 6, 4)
+    defenders = st.sidebar.slider("Védők száma középen", 1, 3, 2)
+    size_m = st.sidebar.slider("Négyzet mérete (viszonylagos)", 12, 30, 18)
+    duration_custom = st.sidebar.slider("Időtartam (perc)", 8, 30, 15)
+    intensity_custom = st.sidebar.selectbox(
+        "Intenzitás",
+        ["alacsony", "alacsony–közepes", "közepes", "közepes–magas", "magas"],
+        index=1,
+    )
+    show_cones = st.sidebar.checkbox("Bóják a rondó sarkain", value=True)
+
+    custom_rondo_params = {
+        "stage_tag": custom_stage_tag,
+        "title": custom_title,
+        "attackers": attackers,
+        "defenders": defenders,
+        "size_m": size_m,
+        "duration_min": duration_custom,
+        "intensity": intensity_custom,
+        "show_cones": show_cones,
+    }
+
 coach_notes = st.text_area(
     "Edzői megjegyzés az egész edzéshez",
     placeholder="Ide írhatod a teljes edzéshez kapcsolódó gondolataidat…",
@@ -484,7 +661,7 @@ if "exercise_notes" not in st.session_state:
 
 generate = st.button("Edzésterv generálása")
 
-plan = []
+plan: List[Dict[str, Any]] = []
 plan_meta = {
     "age_group": age_group,
     "tactical_goal": tactical_goal or "nincs megadva",
@@ -503,15 +680,32 @@ if generate:
     ]
 
     for stage_tag, stage_title in stages:
-        ex = pick_exercise_for_stage(
-            DEMO_DB,
-            age_group=age_group,
-            tactical_goal=tactical_goal,
-            technical_goal=technical_goal,
-            fitness_goal=fitness_goal,
-            period_week=period_week,
-            stage=stage_tag,
-        )
+        # ha erre a stage-re saját rondót kér az edző → azt használjuk
+        if use_custom_rondo and custom_rondo_params and custom_rondo_params["stage_tag"] == stage_tag:
+            ex = create_custom_rondo_exercise(
+                title=custom_rondo_params["title"],
+                age_group=age_group,
+                fitness_goal=fitness_goal,
+                period_week=period_week,
+                stage_tag=stage_tag,
+                attackers=custom_rondo_params["attackers"],
+                defenders=custom_rondo_params["defenders"],
+                size_m=custom_rondo_params["size_m"],
+                duration_min=custom_rondo_params["duration_min"],
+                intensity=custom_rondo_params["intensity"],
+                show_cones=custom_rondo_params["show_cones"],
+            )
+        else:
+            ex = pick_exercise_for_stage(
+                DEMO_DB,
+                age_group=age_group,
+                tactical_goal=tactical_goal,
+                technical_goal=technical_goal,
+                fitness_goal=fitness_goal,
+                period_week=period_week,
+                stage=stage_tag,
+            )
+
         if ex:
             plan.append({"stage_tag": stage_tag, "stage_title": stage_title, "exercise": ex})
 
@@ -542,15 +736,13 @@ if "plan" in st.session_state and st.session_state["plan"]:
         st.write("**Erőnléti cél:**", plan_meta["fitness_goal"])
         st.write("**Edző ID:**", plan_meta["coach_id"])
 
-    # --- ACWR demo ---
     st.subheader("📊 Terhelés és ACWR (demó)")
 
-    total_session_load = sum(ex["exercise"]["duration_min"] for ex in plan) * 10  # nagyon egyszerű becslés
+    total_session_load = sum(ex["exercise"]["duration_min"] for ex in plan) * 10
     acwr_df = demo_acwr_series(total_session_load)
     st.caption("Az ACWR itt csak demo jellegű, később valós GPS / terhelésadatokra cseréljük.")
     st.line_chart(acwr_df.set_index("Hét")[["Terhelés", "ACWR"]])
 
-    # --- Blokkok részletesen ---
     st.header("📚 Gyakorlatok blokkra bontva")
 
     for block in plan:
@@ -561,7 +753,6 @@ if "plan" in st.session_state and st.session_state["plan"]:
         st.subheader(stage_title)
         st.markdown(f"**{ex['title_hu']}**")
 
-        # --- ÚJ: taktikai rajz, ha van diagram_v1 ---
         diagram_spec = ex.get("diagram_v1")
         if diagram_spec:
             fig = draw_drill(diagram_spec, show=False)
@@ -587,7 +778,6 @@ if "plan" in st.session_state and st.session_state["plan"]:
             for v in ex["variations_hu"]:
                 st.write("- " + v)
 
-        # Egyedi edzői megjegyzés ehhez a gyakorlathoz
         note_key = f"note_{ex_id}"
         current_note = st.session_state["exercise_notes"].get(ex_id, "")
         new_note = st.text_area(
@@ -597,7 +787,6 @@ if "plan" in st.session_state and st.session_state["plan"]:
         )
         st.session_state["exercise_notes"][ex_id] = new_note
 
-    # --------- PDF export ---------
     st.header("📄 Magyar PDF export")
 
     if st.button("PDF generálása"):
