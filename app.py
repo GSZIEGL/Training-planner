@@ -314,9 +314,21 @@ def generate_rondo_diagram(
     show_cones: bool,
     title: str,
 ) -> Dict[str, Any]:
+    """
+    Rondó középen, kiemelt négyzettel, sarkoknál/vonalon támadók, középen védők.
+    """
     center_x, center_y = 50, 50
     half = size_units / 2
 
+    # kiemelt játékterület
+    area = {
+        "x": center_x - half - 4,
+        "y": center_y - half - 4,
+        "w": size_units + 8,
+        "h": size_units + 8,
+    }
+
+    # támadók pozíciói – sarkok + 2 középhely (max 6)
     positions = [
         (center_x - half, center_y - half),
         (center_x + half, center_y - half),
@@ -337,6 +349,7 @@ def generate_rondo_diagram(
         if show_cones:
             cones.append({"x": x, "y": y})
 
+    # védők – kis „X” alakban középen
     def_positions = [
         (center_x - 2, center_y),
         (center_x + 2, center_y),
@@ -350,6 +363,7 @@ def generate_rondo_diagram(
 
     ball = {"owner_id": "A1"}
 
+    # passz-szekvencia: 1→2→3→...→1
     passes = []
     attacker_ids = [f"A{i}" for i in range(1, attackers + 1)]
     for i in range(len(attacker_ids)):
@@ -357,12 +371,13 @@ def generate_rondo_diagram(
         to_id = attacker_ids[(i + 1) % len(attacker_ids)]
         passes.append({"from_id": from_id, "to_id": to_id})
 
+    # futások: védők a labdás irányába lépnek
     runs = []
     for j in range(1, defenders + 1):
         from_id = f"D{j}"
         base = next(p for p in players if p["id"] == from_id)
         runs.append(
-            {"from_id": from_id, "to": {"x": base["x"] + 5, "y": base["y"] + 3}}
+            {"from_id": from_id, "to": {"x": base["x"] + 4, "y": base["y"] + 2}}
         )
 
     text_labels = [
@@ -371,12 +386,14 @@ def generate_rondo_diagram(
 
     return {
         "pitch": {"type": "full", "orientation": "horiz"},
+        "area": area,
         "players": players,
         "ball": ball,
         "cones": cones,
         "passes": passes,
         "runs": runs,
         "text_labels": text_labels,
+        "mini_goals": [],
     }
 
 
@@ -387,52 +404,107 @@ def generate_ssg_diagram(
     title: str,
 ) -> Dict[str, Any]:
     """
-    Kisjáték kapura, kb. félpályán:
-    támadók balról jobbra támadnak, védők középen.
+    Kisjáték kapura – kb. félpálya, kiemelt játéktérrel, minikapukkal.
+    Támadás balról jobbra.
     """
+    # játéktér a pálya jobb oldalán (kb. félpálya)
+    area = {
+        "x": 20,
+        "y": 30,
+        "w": 60,
+        "h": 40,
+    }
+
     players = []
     cones = []
 
-    # kapusok (ha vannak)
-    if has_keepers:
-        players.append({"id": "GK_A", "label": "GK", "x": 10, "y": 50, "team": "keeper"})
-        players.append({"id": "GK_D", "label": "GK", "x": 90, "y": 50, "team": "keeper"})
+    # a játéktér sarkain bóják
+    cones.extend(
+        [
+            {"x": area["x"], "y": area["y"]},
+            {"x": area["x"] + area["w"], "y": area["y"]},
+            {"x": area["x"], "y": area["y"] + area["h"]},
+            {"x": area["x"] + area["w"], "y": area["y"] + area["h"]},
+        ]
+    )
 
-    # támadók – 2 sorban
-    atk_y_lines = [40, 60]
-    atk_per_line = (attackers + 1) // 2
+    # kapu – jobb oldalon mini-kapu
+    mini_goals = [
+        {
+            "x": area["x"] + area["w"] + 3,
+            "y": area["y"] + area["h"] / 2,
+            "w": 4,
+            "h": 10,
+        }
+    ]
+
+    if has_keepers:
+        players.append(
+            {"id": "GK_A", "label": "GK", "x": area["x"] - 5, "y": area["y"] + area["h"] / 2, "team": "keeper"}
+        )
+        players.append(
+            {"id": "GK_D", "label": "GK", "x": area["x"] + area["w"] + 8, "y": area["y"] + area["h"] / 2, "team": "keeper"}
+        )
+
+    # támadók – mélységben 2 sor, befelé szűkülve
+    atk_rows_y = [area["y"] + area["h"] * 0.35, area["y"] + area["h"] * 0.65]
+    atk_per_row = (attackers + 1) // 2
     idx = 1
-    for line in atk_y_lines:
-        xs = [20, 30, 40, 50, 60][:atk_per_line]
+    for row_y in atk_rows_y:
+        xs = [
+            area["x"] + area["w"] * 0.25,
+            area["x"] + area["w"] * 0.4,
+            area["x"] + area["w"] * 0.55,
+            area["x"] + area["w"] * 0.7,
+            area["x"] + area["w"] * 0.85,
+        ][:atk_per_row]
         for x in xs:
             if idx > attackers:
                 break
-            players.append({"id": f"A{idx}", "label": str(idx), "x": x, "y": line, "team": "home"})
+            players.append({"id": f"A{idx}", "label": str(idx), "x": x, "y": row_y, "team": "home"})
             idx += 1
 
-    # védők – középen, kicsit tömörebben
-    def_y_lines = [45, 55]
-    def_per_line = (defenders + 1) // 2
+    # védők – kicsit hátrébb, blokkszerűen
+    def_rows_y = [area["y"] + area["h"] * 0.4, area["y"] + area["h"] * 0.6]
+    def_per_row = (defenders + 1) // 2
     jdx = 1
-    for line in def_y_lines:
-        xs = [55, 65, 75][:def_per_line]
+    for row_y in def_rows_y:
+        xs = [
+            area["x"] + area["w"] * 0.55,
+            area["x"] + area["w"] * 0.7,
+            area["x"] + area["w"] * 0.85,
+        ][:def_per_row]
         for x in xs:
             if jdx > defenders:
                 break
-            players.append({"id": f"D{jdx}", "label": "X", "x": x, "y": line, "team": "away"})
+            players.append({"id": f"D{jdx}", "label": "X", "x": x, "y": row_y, "team": "away"})
             jdx += 1
 
+    # labda: mindig az első támadónál
     ball = {"owner_id": "A1"}
 
+    # TAKTIKAI PASSZLÁNC: első 3–4 támadó
     passes = []
-    attacker_ids = [p["id"] for p in players if p["id"].startswith("A")]
-    for i in range(len(attacker_ids) - 1):
-        passes.append({"from_id": attacker_ids[i], "to_id": attacker_ids[i + 1]})
+    attacker_objs = [p for p in players if p["id"].startswith("A")]
+    attacker_objs.sort(key=lambda p: p["x"])  # hátsóból előre
 
+    chain = attacker_objs[:4] if len(attacker_objs) >= 4 else attacker_objs
+
+    for i in range(len(chain) - 1):
+        passes.append({"from_id": chain[i]["id"], "to_id": chain[i + 1]["id"]})
+
+    if has_keepers and chain:
+        passes.append({"from_id": chain[-1]["id"], "to_id": "GK_D"})
+
+    # futások: csatárok kapu felé, védők oldalra tolódnak
     runs = []
+    for a in attacker_objs[-2:]:
+        runs.append(
+            {"from_id": a["id"], "to": {"x": a["x"] + 6, "y": a["y"]}}
+        )
     for d in [p for p in players if p["id"].startswith("D")]:
         runs.append(
-            {"from_id": d["id"], "to": {"x": d["x"] - 5, "y": d["y"]}}
+            {"from_id": d["id"], "to": {"x": d["x"] + 3, "y": d["y"]}}
         )
 
     text_labels = [
@@ -441,12 +513,14 @@ def generate_ssg_diagram(
 
     return {
         "pitch": {"type": "full", "orientation": "horiz"},
+        "area": area,
         "players": players,
         "ball": ball,
         "cones": cones,
         "passes": passes,
         "runs": runs,
         "text_labels": text_labels,
+        "mini_goals": mini_goals,
     }
 
 
@@ -584,7 +658,7 @@ def multiline(pdf: TrainingPDF, txt: str):
         pdf.multi_cell(0, 6, safe[:500] + " ...")
 
 
-def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: Dict[str, str], exercise_notes: Dict[str, str]) -> BytesIO:
+def create_pdf(plan: List[Dict], plan_meta: Dict, coach_notes: str, exercise_notes: Dict[str, str]) -> BytesIO:
     pdf = TrainingPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     init_fonts(pdf)
@@ -734,7 +808,7 @@ st.sidebar.markdown("---")
 use_custom_drill = st.sidebar.checkbox("➕ Saját gyakorlat hozzáadása")
 
 custom_drill_params = None
-custom_drill_type = None
+custom_drill_type_key = None
 
 if use_custom_drill:
     st.sidebar.markdown("**Saját gyakorlat beállításai**")
@@ -805,8 +879,6 @@ if use_custom_drill:
             "intensity": intensity_custom,
         }
         custom_drill_type_key = "ssg"
-else:
-    custom_drill_type_key = None
 
 coach_notes = st.text_area(
     "🧠 Edzői megjegyzés az egész edzéshez",
@@ -839,7 +911,7 @@ if generate:
     for stage_tag, stage_title in stages:
         if use_custom_drill and custom_drill_params and custom_drill_params["stage_tag"] == stage_tag:
             ex = create_custom_exercise(
-                drill_type=custom_drill_type_key,
+                drill_type=custom_drill_type_key or "rondo",
                 title=custom_drill_params["title"],
                 age_group=age_group,
                 fitness_goal=fitness_goal,
