@@ -1,3 +1,4 @@
+# pitch_drawer.py
 from typing import Dict, Any, List, Optional
 
 import matplotlib.pyplot as plt
@@ -10,58 +11,88 @@ from matplotlib.patches import Circle, Rectangle, FancyArrowPatch
 
 def draw_pitch(ax=None):
     """
-    Egyszerű, full-size pálya 0–100 x 0–100 koordinátarendszerben.
+    Full-size pálya 0–100 x 0–100 koordináta-rendszerben.
+    Csíkos füves háttérrel, vonalakkal, kapukkal.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 5))
     else:
         fig = ax.figure
 
-    # Zöld háttér
-    ax.set_facecolor("#3a7d3a")
+    # Csíkos zöld háttér
+    for i in range(7):
+        stripe_color = "#63a15f" if i % 2 == 0 else "#5a9657"
+        ax.add_patch(
+            Rectangle((0, i * (100 / 7)), 100, 100 / 7,
+                      facecolor=stripe_color, edgecolor="none", zorder=0)
+        )
 
     # Külső vonal
-    pitch = Rectangle((0, 0), 100, 100,
-                      linewidth=2, edgecolor="white", facecolor="none")
-    ax.add_patch(pitch)
+    outline = Rectangle((0, 0), 100, 100,
+                        linewidth=2, edgecolor="white", facecolor="none", zorder=1)
+    ax.add_patch(outline)
 
     # Középvonal
-    ax.plot([50, 50], [0, 100], color="white", linewidth=2)
+    ax.plot([50, 50], [0, 100], color="white", linewidth=2, zorder=1)
 
     # Középkör
     center_circle = Circle((50, 50), 10,
-                           linewidth=2, edgecolor="white", facecolor="none")
+                           linewidth=2, edgecolor="white", facecolor="none", zorder=1)
     ax.add_patch(center_circle)
 
     # Középpont
-    ax.scatter([50], [50], color="white", s=20)
+    ax.scatter([50], [50], color="white", s=20, zorder=2)
 
     # 16-osok
-    left_box = Rectangle((0, 20), 16, 60,
-                         linewidth=2, edgecolor="white", facecolor="none")
+    left_box = Rectangle((0, 20), 18, 60,
+                         linewidth=2, edgecolor="white", facecolor="none", zorder=1)
     ax.add_patch(left_box)
-    right_box = Rectangle((84, 20), 16, 60,
-                          linewidth=2, edgecolor="white", facecolor="none")
+    right_box = Rectangle((82, 20), 18, 60,
+                          linewidth=2, edgecolor="white", facecolor="none", zorder=1)
     ax.add_patch(right_box)
 
     # 5-ösök
-    left_small = Rectangle((0, 34), 6, 32,
-                           linewidth=2, edgecolor="white", facecolor="none")
+    left_small = Rectangle((0, 36), 6, 28,
+                           linewidth=2, edgecolor="white", facecolor="none", zorder=1)
     ax.add_patch(left_small)
-    right_small = Rectangle((94, 34), 6, 32,
-                            linewidth=2, edgecolor="white", facecolor="none")
+    right_small = Rectangle((94, 36), 6, 28,
+                            linewidth=2, edgecolor="white", facecolor="none", zorder=1)
     ax.add_patch(right_small)
 
     # Tizenegyes pont
-    ax.scatter([11], [50], color="white", s=20)
-    ax.scatter([89], [50], color="white", s=20)
+    ax.scatter([12], [50], color="white", s=18, zorder=2)
+    ax.scatter([88], [50], color="white", s=18, zorder=2)
 
-    # Kapuk (vonalas jelzés)
-    ax.plot([0, 0], [44, 56], color="white", linewidth=4)
-    ax.plot([100, 100], [44, 56], color="white", linewidth=4)
+    # 16-os előtti félkörök
+    left_arc = Circle((18, 50), 8,
+                      linewidth=2, edgecolor="white", facecolor="none", zorder=1)
+    right_arc = Circle((82, 50), 8,
+                       linewidth=2, edgecolor="white", facecolor="none", zorder=1)
+    # Csak a belső fele látszik, de ez így is ad egy jó érzetet
+    ax.add_patch(left_arc)
+    ax.add_patch(right_arc)
+
+    # Kapuk (egyszerű L-alak, „3D” hatás)
+    goal_width = 14
+    goal_depth = 3
+
+    # Bal kapu
+    ax.add_patch(
+        Rectangle((-goal_depth, 50 - goal_width / 2),
+                  goal_depth, goal_width,
+                  linewidth=2, edgecolor="white",
+                  facecolor="#111827", zorder=2)
+    )
+    # Jobb kapu
+    ax.add_patch(
+        Rectangle((100, 50 - goal_width / 2),
+                  goal_depth, goal_width,
+                  linewidth=2, edgecolor="white",
+                  facecolor="#111827", zorder=2)
+    )
 
     # Beállítások
-    ax.set_xlim(0, 100)
+    ax.set_xlim(-5, 105)
     ax.set_ylim(0, 100)
     ax.set_aspect("equal")
     ax.axis("off")
@@ -74,10 +105,10 @@ def draw_pitch(ax=None):
 # ============================
 
 TEAM_COLORS = {
-    "home": "#1f77b4",     # kék
-    "away": "#d62728",     # piros
-    "neutral": "#ffcf3c",  # sárga
-    "keeper": "#2ca02c",   # zöld
+    "home": "#e11d48",     # piros
+    "away": "#2563eb",     # kék
+    "neutral": "#facc15",  # sárga
+    "keeper": "#22c55e",   # zöld
 }
 
 
@@ -91,8 +122,6 @@ def _get_player_by_id(players: List[Dict[str, Any]], pid: str) -> Optional[Dict[
 def _get_point(players: List[Dict[str, Any]], spec: Dict[str, Any], key: str):
     """
     Visszaad egy (x, y) pontot játékos ID-ból vagy explicit koordinátából.
-    - "{key}_id": játékos azonosító (pl. from_id, to_id)
-    - "{key}":   dict {"x": .., "y": ..}
     """
     id_key = f"{key}_id"
     if id_key in spec:
@@ -118,16 +147,6 @@ def draw_drill(diagram: Dict[str, Any],
                save_path: Optional[str] = None):
     """
     Megrajzolja a pályát + játékosokat + passzokat + futásokat + extra elemeket.
-
-    diagram elvárt kulcsai (nem mind kötelező):
-      - players:  [{id, label, x, y, team}]
-      - cones:    [{x, y}]
-      - passes:   [{from_id/to_id vagy from/to koordináta}]
-      - runs:     [{from_id/to_id vagy from/to koordináta}]
-      - ball:     {owner_id vagy x,y}
-      - text_labels: [{x, y, text}]
-      - area:     {x, y, w, h}        # kiemelt játéktér
-      - mini_goals: [{x, y, w, h}]    # kis kapuk
     """
     fig, ax = plt.subplots(figsize=figsize)
     draw_pitch(ax)
@@ -141,14 +160,14 @@ def draw_drill(diagram: Dict[str, Any],
     area = diagram.get("area")
     mini_goals = diagram.get("mini_goals", [])
 
-    # ---- Kiemelt játéktér (pl. kisjáték mező) ----
+    # ---- Kiemelt játéktér (zóna) ----
     if area:
         ax.add_patch(
             Rectangle(
                 (area["x"], area["y"]),
                 area["w"],
                 area["h"],
-                linewidth=1.5,
+                linewidth=1.8,
                 edgecolor="white",
                 linestyle="--",
                 facecolor="none",
@@ -177,28 +196,38 @@ def draw_drill(diagram: Dict[str, Any],
     # ---- Bóják ----
     for c in cones:
         x, y = c["x"], c["y"]
-        cone = Rectangle((x - 0.8, y - 0.8), 1.6, 1.6,
-                         facecolor="#ff7f0e", edgecolor="black",
-                         linewidth=1, zorder=4)
+        cone = Circle((x, y), 1.2,
+                      facecolor="#f97316", edgecolor="black",
+                      linewidth=1, zorder=4)
         ax.add_patch(cone)
 
-    # ---- Játékosok ----
+    # ---- Játékosok (kétgyűrűs marker) ----
     for p in players:
         x, y = p["x"], p["y"]
         label = p.get("label", "")
-        color = TEAM_COLORS.get(p.get("team", "home"), "#1f77b4")
+        team = p.get("team", "home")
+        inner_color = TEAM_COLORS.get(team, "#e11d48")
 
-        circ = Circle((x, y), 3,
-                      facecolor=color,
-                      edgecolor="black",
-                      linewidth=1.2,
-                      zorder=5)
-        ax.add_patch(circ)
+        # külső kontúr
+        outer = Circle((x, y), 3.4,
+                       facecolor="black",
+                       edgecolor="black",
+                       linewidth=0.5,
+                       zorder=5)
+        ax.add_patch(outer)
+
+        # belső színes kör
+        inner = Circle((x, y), 2.8,
+                       facecolor=inner_color,
+                       edgecolor="white",
+                       linewidth=1.4,
+                       zorder=6)
+        ax.add_patch(inner)
 
         ax.text(x, y, label,
                 ha="center", va="center",
                 fontsize=7, color="black",
-                zorder=6)
+                zorder=7)
 
     # ---- Passzok (folyamatos fehér nyíl) ----
     for ps in passes:
@@ -238,7 +267,7 @@ def draw_drill(diagram: Dict[str, Any],
         )
         ax.add_patch(arrow)
 
-    # ---- Labda ----
+    # ---- Labda (fehér-fekete „foci labda”) ----
     ball_x = ball_spec.get("x")
     ball_y = ball_spec.get("y")
     if ball_spec.get("owner_id"):
@@ -247,12 +276,18 @@ def draw_drill(diagram: Dict[str, Any],
             ball_x, ball_y = owner["x"], owner["y"]
 
     if ball_x is not None and ball_y is not None:
-        ball = Circle((ball_x, ball_y), 1.5,
-                      facecolor="white",
-                      edgecolor="black",
-                      linewidth=1.2,
-                      zorder=7)
-        ax.add_patch(ball)
+        outer = Circle((ball_x, ball_y), 1.3,
+                       facecolor="white",
+                       edgecolor="black",
+                       linewidth=1.1,
+                       zorder=8)
+        ax.add_patch(outer)
+        inner = Circle((ball_x, ball_y), 0.6,
+                       facecolor="black",
+                       edgecolor="black",
+                       linewidth=0.8,
+                       zorder=9)
+        ax.add_patch(inner)
 
     # ---- Szövegcímkék ----
     for t in texts:
