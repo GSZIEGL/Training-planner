@@ -963,10 +963,10 @@ if "plan" in st.session_state and st.session_state["plan"]:
 
     # 🔹 Periodizációs táblázat
     st.subheader("📋 Periodizációs fókusz a kiválasztott korosztályra / szintre")
-   period_df = get_periodization_table(
+    period_df = get_periodization_table(
     plan_meta["age_group"],
     plan_meta["period_week"],
-)
+    )
 
     if period_df is not None:
         st.table(period_df)
