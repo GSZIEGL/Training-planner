@@ -6,6 +6,50 @@ import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 
+from pitch_drawer import draw_drill  # <-- ÚJ: rajzoló modul importja
+
+
+# =====================================================
+# 0. DIAGRAM – 4v2 RONDÓ DEMO SPEC
+# =====================================================
+
+Rondo4v2_DIAGRAM = {
+    "pitch": {
+        "type": "full",
+        "orientation": "horiz",
+    },
+    "players": [
+        # támadók – négyzet sarkai
+        {"id": "A1", "label": "1", "x": 35, "y": 40, "team": "home"},
+        {"id": "A2", "label": "2", "x": 65, "y": 40, "team": "home"},
+        {"id": "A3", "label": "3", "x": 35, "y": 60, "team": "home"},
+        {"id": "A4", "label": "4", "x": 65, "y": 60, "team": "home"},
+        # védők – középen
+        {"id": "D1", "label": "X", "x": 48, "y": 50, "team": "away"},
+        {"id": "D2", "label": "X", "x": 52, "y": 50, "team": "away"},
+    ],
+    "ball": {
+        "owner_id": "A1"
+    },
+    "cones": [
+        {"x": 35, "y": 40},
+        {"x": 65, "y": 40},
+        {"x": 35, "y": 60},
+        {"x": 65, "y": 60},
+    ],
+    "passes": [
+        {"from_id": "A1", "to_id": "A2"},
+        {"from_id": "A2", "to_id": "A4"},
+    ],
+    "runs": [
+        {"from_id": "D1", "to": {"x": 55, "y": 55}},
+        {"from_id": "D2", "to": {"x": 45, "y": 45}},
+    ],
+    "text_labels": [
+        {"x": 5, "y": 95, "text": "Bemelegítő rondó 4v2 – U12–U15"},
+    ],
+}
+
 
 # =====================================================
 # 0. DEMÓ ADATBÁZIS – KÉSŐBB CSERÉLHETŐ A VALÓDI JSON-RA
@@ -44,6 +88,7 @@ DEMO_DB: List[Dict] = [
             "Max. 2 érintés.",
             "Labdaszerzés után 5 gyors passz = pont."
         ],
+        "diagram_v1": Rondo4v2_DIAGRAM,  # <-- ÚJ: taktikai ábra
     },
 
     # -------- Kis létszámú taktikai játék --------
@@ -515,6 +560,13 @@ if "plan" in st.session_state and st.session_state["plan"]:
 
         st.subheader(stage_title)
         st.markdown(f"**{ex['title_hu']}**")
+
+        # --- ÚJ: taktikai rajz, ha van diagram_v1 ---
+        diagram_spec = ex.get("diagram_v1")
+        if diagram_spec:
+            fig = draw_drill(diagram_spec, show=False)
+            st.pyplot(fig, use_container_width=True)
+
         st.write(
             f"*Formátum:* {ex['format']}  |  *Típus:* {ex['exercise_type']}  |  "
             f"*Időtartam:* {ex['duration_min']} perc  |  *Intenzitás:* {ex['intensity']}"
