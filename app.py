@@ -132,140 +132,200 @@ DEMO_DB: List[Dict[str, Any]] = [
 # 0/B. PERIODIZÁCIÓS PROFILOK – KOROSZTÁLY / FELNŐTT
 # =====================================================
 
-PERIODIZATION_PROFILES: Dict[str, List[Dict[str, str]]] = {
-    "U7–U11": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Elsődleges fókusz – labdavezetés, cselek, labdaérzékelés, mindez sok játékhelyzetben.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "Alap 1v1 helyzetek, egyszerű döntéshozatal, támadás–védekezés váltás játékosan.",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Koordináció, gyorsasági reakciók, sok kisjáték, strukturált terhelés nélkül.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "1v1–4v4 kisjátékok, sok labda, élményközpontú edzés.",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Bátorság, önbizalom, labdával való kapcsolat megszerettetése.",
-        },
-    ],
-    "U12–U15": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Gyors passzjáték, irányváltások, labdakezelés nyomás alatt.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "1v1, 2v1, 3v2 alapelvek, pressing alapok, átmenetek alap szinten.",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Gyorsaság, agilitás, alacsony–közepes intenzitású állóképességi elemek.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "4v4–8v8, rondók, kisjátékok, alap build-up / pressing szituációk.",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Tanulási attitűd, koncentráció, csapatjáték alapnormák.",
-        },
-    ],
-    "U16–U19": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Technika tempóban – passz, átvétel, 1v1 megoldások meccsintenzitáson.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "Pressing rendszerek, build-up struktúrák, csapatrészek együttműködése.",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Gyorsaság-állóképesség, iramváltások, sprintek, alap ACWR szemlélet.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "8v8–11v11 fázisjáték, taktikai edzés szélességben és mélységben.",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Versenyhelyzet kezelése, szerepek elfogadása, felelősség.",
-        },
-    ],
-    "Felnőtt amatőr": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Stabil alaptechnika szinten tartása, gyenge láb, első érintés fejlesztése.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "Alapelvű szervezettség (védekezési blokk, átmenetek), egyszerű, jól érthető struktúrák.",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Általános állóképesség, sérülésmegelőzés, terhelés óvatos emelése heti 2–3 edzés mellett.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "Nagyobb területű játékok (7v7–11v11), meccsszituációk gyakorlása.",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Motiváció fenntartása, csapategység, munka–foci balansz.",
-        },
-    ],
-    "Felnőtt félprofi": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Technikai precizitás meccsintenzitáson, egyérintős játék, döntéshozatal gyorsítása.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "Strukturált pressing, build-up koncepciók, ellenfélre szabott taktikai terv.",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Iramváltás, ismétléses sprintek, periodizált terhelés heti 3–4 edzéssel.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "11v11 taktikai edzések, speciális fázisok (pl. labdakihozatal, rögzített szituációk).",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Versenyközpontú gondolkodás, meccsre fókuszált hétközi munka.",
-        },
-    ],
-    "Felnőtt profi": [
-        {
-            "Terület": "Technika",
-            "Fókusz": "Top szintű végrehajtás nyomás alatt, első érintés, tempóváltás labdával.",
-        },
-        {
-            "Terület": "Taktika",
-            "Fókusz": "Komplex csapatszintű modellek (pressing, build-up, átmenetek, pozíciós játék).",
-        },
-        {
-            "Terület": "Erőnlét",
-            "Fókusz": "Meccsintenzitás replikálása, ACWR, GPS alapú terhelésmenedzsment, mikro/mezociklusok.",
-        },
-        {
-            "Terület": "Játékforma",
-            "Fókusz": "Matchday-hez igazított fázisedzések, specifikus szituációk magas minőségben.",
-        },
-        {
-            "Terület": "Mentális",
-            "Fókusz": "Nyomáskezelés, fókusz, profi életmód és regeneráció.",
-        },
-    ],
+# =====================================================
+# 0/B. PERIODIZÁCIÓS PROFILOK – KOROSZTÁLY / FELNŐTT + HÉT
+# =====================================================
+
+# Minden korosztály/szint alatt 1–4. hétre külön mini-táblázat.
+# Az első sor mindig: "Mikrociklus fókusza".
+PERIODIZATION_PROFILES: Dict[str, Dict[int, List[Dict[str, str]]]] = {
+    "U7–U11": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap technikai és játékfókusz, kisebb intenzitással."},
+            {"Terület": "Technika", "Fókusz": "Sok labdaérintés, labdavezetés, cselek játékos formában."},
+            {"Terület": "Taktika", "Fókusz": "Egyszerű 1v1 helyzetek, támadás–védekezés gyors váltása."},
+            {"Terület": "Erőnlét", "Fókusz": "Koordinációs játékok, reakciógyorsaság, nem célzott futómunka."},
+            {"Terület": "Játékforma", "Fókusz": "1v1–3v3, sok gól, sok próbálkozás, kevés megszakítás."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: több párharc, több döntési helyzet, de továbbra is játékos formában."},
+            {"Terület": "Technika", "Fókusz": "Cselek 1v1-ben, labdavezetés irányváltásokkal."},
+            {"Terület": "Taktika", "Fókusz": "Egyszerű támogatás: ki van közel, ki távol – hova mozogjak labdás mellett?"},
+            {"Terület": "Erőnlét", "Fókusz": "Rövid, intenzívebb játékok pihenőkkel, de alacsony edzésvolumen."},
+            {"Terület": "Játékforma", "Fókusz": "2v2–4v4 kisjátékok, gólra törő felfogás."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: intenzívebb játékok, több ismétlés az azonos típusú gyakorlatokból."},
+            {"Terület": "Technika", "Fókusz": "Labdavezetés sebességben, több labdás futás, ütemváltás."},
+            {"Terület": "Taktika", "Fókusz": "Visszazárás labdavesztés után, alap átmenet gondolkodás."},
+            {"Terület": "Erőnlét", "Fókusz": "Több mozgásos játék, kissé nagyobb terhelés – továbbra is játékos eszközökkel."},
+            {"Terület": "Játékforma", "Fókusz": "3v3–4v4, kis terület, sok labdaérintés."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, sok játék, kevesebb magyarázat."},
+            {"Terület": "Technika", "Fókusz": "Meglévő készségek ismétlése, stabilizálás, kevés új elem."},
+            {"Terület": "Taktika", "Fókusz": "Egyszerű szabályjátékok: pl. csak jobbról támadhatunk, stb."},
+            {"Terület": "Erőnlét", "Fókusz": "Terhelés inkább a játék örömén keresztül, nem szervezett futófeladatokkal."},
+            {"Terület": "Játékforma", "Fókusz": "Mini „bajnokság” jelleg, 3–4 rövid meccs egymás után."},
+        ],
+    },
+
+    "U12–U15": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: technikai alapok tempóban, kisjátékokkal kombinálva."},
+            {"Terület": "Technika", "Fókusz": "Passz–átvétel, első érintés, labdavezetés irányváltásokkal."},
+            {"Terület": "Taktika", "Fókusz": "1v1, 2v1, alap helyezkedés labdával és labda nélkül."},
+            {"Terület": "Erőnlét", "Fókusz": "Agilitás, koordináció, rövid sorozatokban végzett futások."},
+            {"Terület": "Játékforma", "Fókusz": "4v4–6v6, rondó típusú gyakorlatok bevezetése."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai elvek (pressing, támogatás) erősítése kis területen."},
+            {"Terület": "Technika", "Fókusz": "Gyors passzjáték kis helyen, kevés érintéssel."},
+            {"Terület": "Taktika", "Fókusz": "Pressing alapja: ki lép ki, ki biztosít, hogyan zárjuk a passzsávot."},
+            {"Terület": "Erőnlét", "Fókusz": "Közepes intenzitás, több iramváltás – de még nem felnőtt szint."},
+            {"Terület": "Játékforma", "Fókusz": "5v5–7v7, pressinges játékszabályokkal (pl. labdavesztés után X mp-en belül visszatámadás)."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: intenzívebb terhelés, átmenetek és pressing gyakorlása."},
+            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás meccs-tempó közelében."},
+            {"Terület": "Taktika", "Fókusz": "Átmenetek: labdavesztés utáni reakciók, első passz labdaszerzés után."},
+            {"Terület": "Erőnlét", "Fókusz": "Gyorsaság-állóképesség játékos formában (ismétléses kisjátékok)."},
+            {"Terület": "Játékforma", "Fókusz": "7v7–8v8, célzott taktikai szabályokkal (pl. csak X passz után lehet kapura lőni)."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: stabilizálás, ismétlés, mérkőzésfókusz."},
+            {"Terület": "Technika", "Fókusz": "Meglévő technikai elemek finomítása, kevés új inger."},
+            {"Terület": "Taktika", "Fókusz": "Meccsszituációk modellezése, egyszerű game-plan végrehajtása."},
+            {"Terület": "Erőnlét", "Fókusz": "Terhelés kissé csökkentve, frissességre törekvés."},
+            {"Terület": "Játékforma", "Fókusz": "8v8–9v9, közelebb a meccs formátumhoz."},
+        ],
+    },
+
+    "U16–U19": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap taktikai struktúrák és ritmus felvétele."},
+            {"Terület": "Technika", "Fókusz": "Technika tempóban, kevés érintés, nyomás alatti döntéshozatal."},
+            {"Terület": "Taktika", "Fókusz": "Alaprendszer (4–3–3 / 4–2–3–1 stb.) szerepköreinek tisztázása."},
+            {"Terület": "Erőnlét", "Fókusz": "Általános terhelés felépítése, iramváltásos játékok."},
+            {"Terület": "Játékforma", "Fókusz": "6v6–9v9, csapatrészek együttműködése."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: pressing és build-up részletesebb építése."},
+            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás pressing alatt, gyors passzok."},
+            {"Terület": "Taktika", "Fókusz": "Pressing trigger-ek, letámadás iránya, középpálya működése."},
+            {"Terület": "Erőnlét", "Fókusz": "Gyorsaság-állóképesség, magasabb intenzitású szekciók."},
+            {"Terület": "Játékforma", "Fókusz": "8v8–11v11 fázisjáték, pressinges szabályokkal."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcsintenzitás, meccsprofil modellezése."},
+            {"Terület": "Technika", "Fókusz": "Technika teljes meccsintenzitás mellett, kevés hibaszázalékkal."},
+            {"Terület": "Taktika", "Fókusz": "Komplett játékmodell gyakorlása: labdabirtoklás, pressing, átmenetek."},
+            {"Terület": "Erőnlét", "Fókusz": "Sprintek, ismétléses terhelés, ACWR szemlélet figyelembevétele."},
+            {"Terület": "Játékforma", "Fókusz": "11v11 taktikai edzések, specifikus szakaszokkal."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, frissítés, taktikai finomhangolás."},
+            {"Terület": "Technika", "Fókusz": "Stabil technikai végrehajtás, kevés volumen, magas minőség."},
+            {"Terület": "Taktika", "Fókusz": "Game-plan konkrét részletei a következő meccsre."},
+            {"Terület": "Erőnlét", "Fókusz": "Terhelés csökkentése, regeneráció támogatása."},
+            {"Terület": "Játékforma", "Fókusz": "Rövid, intenzív meccsjáték-szakaszok, sok pihenővel."},
+        ],
+    },
+
+    "Felnőtt amatőr": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: általános állóképesség + alap taktikai szervezettség."},
+            {"Terület": "Technika", "Fókusz": "Alap passz–átvétel, gyenge láb, hosszú kihagyás utáni visszaszoktatás."},
+            {"Terület": "Taktika", "Fókusz": "Védekezési blokk alapjai, egyszerű felállás betartása."},
+            {"Terület": "Erőnlét", "Fókusz": "Közepes intenzitású, vegyes jellegű futás és kisjáték, sérülésmegelőzés."},
+            {"Terület": "Játékforma", "Fókusz": "5v5–8v8, laza szervezettséggel, sok meccsjáték."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: intenzitás emelése, több pressing / átmenet edzésen."},
+            {"Terület": "Technika", "Fókusz": "Technikai stabilitás fáradás mellett."},
+            {"Terület": "Taktika", "Fókusz": "Letámadás és visszarendeződés alapelvei amatőr szinten."},
+            {"Terület": "Erőnlét", "Fókusz": "Iramos kisjátékok, rövid futások, de kontrollált volumen."},
+            {"Terület": "Játékforma", "Fókusz": "7v7–11v11 gyakorló meccsek, taktikai szabályokkal."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: elérhető csúcsterhelés a civil terhelés mellett."},
+            {"Terület": "Technika", "Fókusz": "Legfontosabb technikai elemek (pl. befejezések, beadások)."},
+            {"Terület": "Taktika", "Fókusz": "Meccs-jellegű szituációk: pontrúgások, védekezés rendezetlen helyzetben."},
+            {"Terület": "Erőnlét", "Fókusz": "Nagyobb intenzitás, de rövid blokkokban, sérüléskockázat figyelésével."},
+            {"Terület": "Játékforma", "Fókusz": "11v11 modellezés, egyszerű game-plan gyakorlása."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: terhelés csökkentése, meccsre hangolás."},
+            {"Terület": "Technika", "Fókusz": "Kevés, rövid technikai blokkok, inkább bemelegítés jelleg."},
+            {"Terület": "Taktika", "Fókusz": "Pozíciós eligazítás, pontrúgások, game-plan átismétlése."},
+            {"Terület": "Erőnlét", "Fókusz": "Alacsonyabb volumen, frissesség biztosítása."},
+            {"Terület": "Játékforma", "Fókusz": "Rövid meccsjátékok, döntően taktikai fókuszszal."},
+        ],
+    },
+
+    "Felnőtt félprofi": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: terhelés felépítése, alapelvű védekezés és felállás."},
+            {"Terület": "Technika", "Fókusz": "Passz–átvétel tempóban, első érintés minősége."},
+            {"Terület": "Taktika", "Fókusz": "Védekezési struktúra, pressing első lépései."},
+            {"Terület": "Erőnlét", "Fókusz": "Általános állóképesség és gyorsaság alapozása."},
+            {"Terület": "Játékforma", "Fókusz": "7v7–11v11, de rövidebb blokkokkal."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai részletek (pressing + build-up) magasabb intenzitáson."},
+            {"Terület": "Technika", "Fókusz": "Technikai kivitelezés pressing alatt, szűk területen."},
+            {"Terület": "Taktika", "Fókusz": "Ellenfélre reagáló pressing és build-up variációk."},
+            {"Terület": "Erőnlét", "Fókusz": "Iramváltás, ismétléses futások (játékba ágyazva)."},
+            {"Terület": "Játékforma", "Fókusz": "11v11 fázisjáték, célzott támadási- és védekezési szakaszokkal."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcsintenzitás, meccsintenzitás replikálása."},
+            {"Terület": "Technika", "Fókusz": "Technika meccsterhelés mellett, minimális hibával."},
+            {"Terület": "Taktika", "Fókusz": "Komplett játékmodell – pressing, build-up, átmenetek, pontrúgások."},
+            {"Terület": "Erőnlét", "Fókusz": "Nagy intenzitású blokkok, kontrollált ACWR-rel."},
+            {"Terület": "Játékforma", "Fókusz": "11v11, meccsre hasonlító terhelési mintával."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, frissítés, matchday fókusz."},
+            {"Terület": "Technika", "Fókusz": "Alacsony volumenű, de minőségi technikai gyakorlatok."},
+            {"Terület": "Taktika", "Fókusz": "Ellenfélre szabott game-plan, pozíciós finomhangolás."},
+            {"Terület": "Erőnlét", "Fókusz": "Volumen csökkentése, intenzitás rövid blokkokban tartása."},
+            {"Terület": "Játékforma", "Fókusz": "Rövid, nagy intenzitású meccsszakaszok, sok pihenővel."},
+        ],
+    },
+
+    "Felnőtt profi": {
+        1: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap ritmus, csapatszintű alapelvek frissítése."},
+            {"Terület": "Technika", "Fókusz": "Első érintés, tempóváltás labdával, pozícióspecifikus technika."},
+            {"Terület": "Taktika", "Fókusz": "Alap játékmodell felidézése (pressing, build-up, átmenetek)."},
+            {"Terület": "Erőnlét", "Fókusz": "Terhelés fokozatos emelése ACWR figyelembevételével."},
+            {"Terület": "Játékforma", "Fókusz": "8v8–11v11 fázisjáték, kontrollált terheléssel."},
+        ],
+        2: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai részletek, magasabb intenzitású szakaszok."},
+            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás speciális taktikai helyzetekben."},
+            {"Terület": "Taktika", "Fókusz": "Pressing és build-up finomhangolása, pozíciós játék."},
+            {"Terület": "Erőnlét", "Fókusz": "Meccsintenzitás közelében végzett ismétléses futások/játékok."},
+            {"Terület": "Játékforma", "Fókusz": "11v11, ellenfél-profilra épített gyakorlatok."},
+        ],
+        3: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcs, meccsprofil teljes szimulálása."},
+            {"Terület": "Technika", "Fókusz": "Minimális hibaszázalékú technika teljes meccsterhelés mellett."},
+            {"Terület": "Taktika", "Fókusz": "Game-plan gyakorlása meccsritmusban, pressing és átmenetek finomítása."},
+            {"Terület": "Erőnlét", "Fókusz": "Csúcsterhelés, de kontrollált ACWR-rel és regenerációval."},
+            {"Terület": "Játékforma", "Fókusz": "11v11 edzésmeccsek, specifikus fókusz-szakaszokkal."},
+        ],
+        4: [
+            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: tapering, frissítés, meccsre hangolás."},
+            {"Terület": "Technika", "Fókusz": "Csak könnyű, rövid technikai blokkok, frissítő jelleggel."},
+            {"Terület": "Taktika", "Fókusz": "Részletek finomhangolása, pontrúgások és game-plan ismétlése."},
+            {"Terület": "Erőnlét", "Fókusz": "Volumen jelentős csökkentése, intenzitás rövid „élesítés” blokkokban."},
+            {"Terület": "Játékforma", "Fókusz": "Rövid, magas intenzitású játékszakaszok bő regenerációval."},
+        ],
+    },
 }
+
 
 
 def get_week_focus(age_group: str, week: int) -> str:
@@ -364,22 +424,23 @@ def get_week_focus(age_group: str, week: int) -> str:
 
 def get_periodization_table(age_group: str, week: int):
     """
-    Visszaadja a korosztály / szint periodizációs táblázatát,
-    az elejére beszúrva a konkrét hét (mikrociklus) fókuszát.
+    Visszaadja a korosztály / szint + hét alapján a teljes periodizációs táblát.
+    Minden hétre külön sorok vannak felvéve a PERIODIZATION_PROFILES-ben.
     """
-    rows = PERIODIZATION_PROFILES.get(age_group)
+    group = PERIODIZATION_PROFILES.get(age_group)
+    if not group:
+        return None
+
+    rows = group.get(week)
+    if not rows:
+        # ha valamiért nincs adott hét, essünk vissza az 1. hétre
+        rows = group.get(1, [])
+
     if not rows:
         return None
 
-    base_df = pd.DataFrame(rows)
-    focus_text = get_week_focus(age_group, week)
+    return pd.DataFrame(rows)
 
-    week_row = pd.DataFrame(
-        [{"Terület": "Mikrociklus fókusza", "Fókusz": focus_text}]
-    )
-
-    df = pd.concat([week_row, base_df], ignore_index=True)
-    return df
 
 
 
