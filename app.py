@@ -16,12 +16,14 @@ from pitch_drawer import draw_drill
 
 
 ############################################################
-# 1. JSON BETÖLTÉSE
+# 1. KONSTANSOK, JSON BETÖLTÉSE
 ############################################################
 
 JSON_PATH = "drill_metadata_with_u7u9.json"
 DRILL_IMAGE_FOLDER = "."      # PNG fájlok mappa
-LOGO_PATH = "bp_logo.png"     # IDE tedd a Training Blueprint logót (ugyanabba a mappába)
+LOGO_PATH = "bp_logo.png"     # Training Blueprint logó (ugyanabban a mappában)
+DEJAVU_REG = "DejaVuSans.ttf"
+DEJAVU_BOLD = "DejaVuSans-Bold.ttf"
 
 
 @st.cache_data
@@ -326,20 +328,14 @@ def pdf_safe(text: Any) -> str:
     if text is None:
         return ""
     s = str(text)
-    # tipikus "rossz" unicode karakterek cseréje
+    # tipikus "rossz" unicode karakterek cseréje – óvatos fallback
     replacements = {
-        "–": "-",
-        "—": "-",
         "…": "...",
         "„": '"',
         "”": '"',
         "’": "'",
         "′": "'",
         "́": "",
-        "ő": "o",
-        "Ő": "O",
-        "ű": "u",
-        "Ű": "U",
     }
     for old, new in replacements.items():
         s = s.replace(old, new)
@@ -558,7 +554,7 @@ for i, block in enumerate(st.session_state.plan):
 
 
 ############################################################
-# PDF EXPORT
+# 10. PDF EXPORT (UNICODE FONTTAL)
 ############################################################
 
 st.header("📄 PDF Export")
@@ -577,6 +573,16 @@ def create_training_pdf(
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
+    # Unicode fontok hozzáadása (ha elérhetők)
+    base_font = "Arial"
+    try:
+        if os.path.exists(DEJAVU_REG) and os.path.exists(DEJAVU_BOLD):
+            pdf.add_font("DejaVu", "", DEJAVU_REG, uni=True)
+            pdf.add_font("DejaVu", "B", DEJAVU_BOLD, uni=True)
+            base_font = "DejaVu"
+    except Exception:
+        base_font = "Arial"
+
     # === ÖSSZEFOGLALÓ OLDAL ===
     pdf.add_page()
 
@@ -590,35 +596,35 @@ def create_training_pdf(
     else:
         pdf.set_y(10)
 
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, pdf_safe("Training Blueprint - Edzesterv"), ln=1)
+    pdf.set_font(base_font, "B", 16)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
-    pdf.set_font("Arial", "", 12)
+    pdf.set_font(base_font, "", 12)
     pdf.ln(2)
-    pdf.multi_cell(0, 6, pdf_safe(f"Korosztaly: {korosztaly}"))
-    pdf.multi_cell(0, 6, pdf_safe(f"Periodizacios het: {period_week}"))
-    pdf.multi_cell(0, 6, pdf_safe(f"Fo taktikai cel: {fo_taktikai or '-'}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {korosztaly}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Periódizációs hét: {period_week}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Fő taktikai cél: {fo_taktikai or '-'}"))
 
     if taktikai_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Taktikai cimkek: " + ", ".join(taktikai_cimkek))
+            pdf_safe("Taktikai címkék: " + ", ".join(taktikai_cimkek))
         )
     if technikai_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Technikai cimkek: " + ", ".join(technikai_cimkek))
+            pdf_safe("Technikai címkék: " + ", ".join(technikai_cimkek))
         )
     if kond_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Kondicionalis cimkek: " + ", ".join(kond_cimkek))
+            pdf_safe("Kondicionális címkék: " + ", ".join(kond_cimkek))
         )
 
     pdf.ln(4)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 7, pdf_safe("Altalanos edzoi megjegyzes az edzeshez:"), ln=1)
-    pdf.set_font("Arial", "", 12)
+    pdf.set_font(base_font, "B", 12)
+    pdf.cell(0, 7, pdf_safe("Általános edzői megjegyzés az edzéshez:"), ln=1)
+    pdf.set_font(base_font, "", 12)
     pdf.multi_cell(0, 6, pdf_safe(coach_notes or "-"))
 
     # === GYAKORLATOK: 1 GYAKORLAT = 1 OLDAL ===
@@ -628,7 +634,7 @@ def create_training_pdf(
 
         pdf.add_page()
 
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font(base_font, "B", 14)
         pdf.cell(0, 8, pdf_safe(stage_label(stage)), ln=1)
 
         # ---- KÉP FELÜL ----
@@ -654,33 +660,34 @@ def create_training_pdf(
                 pdf.ln(5)
                 os.remove(tmp_diagram)
             except Exception:
-                pdf.set_font("Arial", "", 11)
+                pdf.set_font(base_font, "", 11)
                 pdf.multi_cell(
                     0, 6,
-                    pdf_safe("[Diagram / kep beillesztese nem sikerult]")
+                    pdf_safe("[Diagram / kép beillesztése nem sikerült]")
                 )
 
         # ---- SZÖVEGEK: Leírás, Szervezés, Coaching pontok ----
         pdf.ln(2)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 6, pdf_safe("Leiras:"), ln=1)
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font(base_font, "B", 12)
+        pdf.cell(0, 6, pdf_safe("Leírás:"), ln=1)
+        pdf.set_font(base_font, "", 12)
         pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "") or "-"))
 
         pdf.ln(2)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 6, pdf_safe("Szervezes:"), ln=1)
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font(base_font, "B", 12)
+        pdf.cell(0, 6, pdf_safe("Szervezés:"), ln=1)
+        pdf.set_font(base_font, "", 12)
         pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "") or "-"))
 
         pdf.ln(2)
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font(base_font, "B", 12)
         pdf.cell(0, 6, pdf_safe("Coaching pontok:"), ln=1)
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font(base_font, "", 12)
         coaching_txt = ex.get("coaching_points", "") or "-"
         pdf.multi_cell(0, 6, pdf_safe(coaching_txt))
 
     raw = pdf.output(dest="S")
+    # unicode font esetén ez már bytes, core fontnál lehet str
     if isinstance(raw, bytes):
         pdf_bytes = raw
     else:
