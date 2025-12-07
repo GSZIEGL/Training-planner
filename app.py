@@ -33,34 +33,70 @@ EX_DB = load_db()
 
 
 ############################################################
-# 2. SZŰRŐLISTÁK A JSON-BŐL
+# 2. SEGÉD: DUPLIKÁCIÓK ELTÁVOLÍTÁSA (kis/nagybetű, space)
 ############################################################
 
-FO_TAKTIKAI_CELOK = sorted({ex["fo_taktikai_cel"] for ex in EX_DB})
-
-TAKTIKAI_CIMKEK = sorted({
-    cimke
-    for ex in EX_DB
-    for cimke in ex.get("taktikai_cel_cimkek", [])
-})
-
-TECHNIKAI_CIMKEK = sorted({
-    cimke
-    for ex in EX_DB
-    for cimke in ex.get("technikai_cel_cimkek", [])
-})
-
-KONDICIONALIS_CIMKEK = sorted({
-    cimke
-    for ex in EX_DB
-    for cimke in ex.get("kondicionalis_cel_cimkek", [])
-})
-
-KATEGORIÁK = sorted({ex["gyakorlat_kategoria"] for ex in EX_DB})
+def unique_normalized(values: List[str]) -> List[str]:
+    seen = set()
+    result = []
+    for v in values:
+        if v is None:
+            continue
+        s = str(v).strip()
+        key = s.lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(s)
+    return result
 
 
 ############################################################
-# 3. PERIODIZÁCIÓ → ALAP CÉLOK
+# 3. SZŰRŐLISTÁK A JSON-BŐL
+############################################################
+
+FO_TAKTIKAI_CELOK = sorted(
+    unique_normalized([ex.get("fo_taktikai_cel", "") for ex in EX_DB])
+)
+
+TAKTIKAI_CIMKEK = sorted(
+    unique_normalized(
+        [
+            cimke
+            for ex in EX_DB
+            for cimke in ex.get("taktikai_cel_cimkek", [])
+        ]
+    )
+)
+
+TECHNIKAI_CIMKEK = sorted(
+    unique_normalized(
+        [
+            cimke
+            for ex in EX_DB
+            for cimke in ex.get("technikai_cel_cimkek", [])
+        ]
+    )
+)
+
+KONDICIONALIS_CIMKEK = sorted(
+    unique_normalized(
+        [
+            cimke
+            for ex in EX_DB
+            for cimke in ex.get("kondicionalis_cel_cimkek", [])
+        ]
+    )
+)
+
+KATEGORIÁK = sorted(
+    unique_normalized(
+        [ex.get("gyakorlat_kategoria", "") for ex in EX_DB]
+    )
+)
+
+
+############################################################
+# 4. PERIODIZÁCIÓ → ALAP CÉLOK
 ############################################################
 
 def get_default_targets(age_group: str, week: int) -> Dict[str, Any]:
@@ -130,7 +166,7 @@ def get_default_targets(age_group: str, week: int) -> Dict[str, Any]:
 
 
 ############################################################
-# 4. STAGE + KATEGÓRIA ALAPÚ PONTOZÁS
+# 5. STAGE + KATEGÓRIA ALAPÚ PONTOZÁS (KISKOROSZTÁLY TUNING)
 ############################################################
 
 def score_exercise(
@@ -140,6 +176,7 @@ def score_exercise(
     desired_taktikai: List[str],
     desired_technikai: List[str],
     desired_kond: List[str],
+    age_group: str,
 ) -> int:
     score = 0
 
@@ -165,7 +202,7 @@ def score_exercise(
         if c in ex_k:
             score += 1
 
-    # Kategória preferencia stage szerint
+    # Kategória preferencia stage szerint (alap logika)
     kat = ex.get("gyakorlat_kategoria", "")
 
     if stage == "bemelegites":
@@ -200,11 +237,20 @@ def score_exercise(
         elif kat in ["rondo", "kisjatek", "technikazas"]:
             score -= 4
 
+    # 🔧 Extra tuning kiskorosztályra: ne toljunk nagy meccsjátékot cel2/cel3-ba
+    if age_group in ["U7-U9", "U10-U12"] and stage in ["cel2", "cel3"]:
+        if kat == "merkozesjatek":
+            score -= 6  # erős büntetés
+        elif kat in ["kisjatek", "rondo"]:
+            score += 3
+        elif kat in ["jatekszituacio"]:
+            score += 2
+
     return score
 
 
 ############################################################
-# 5. GYAKORLAT KIVÁLASZTÁSA
+# 6. GYAKORLAT KIVÁLASZTÁSA (KOROSZTÁLY + NEM ISMÉTLÜNK)
 ############################################################
 
 def pick_exercise(
@@ -214,12 +260,20 @@ def pick_exercise(
     desired_technikai: List[str],
     desired_kond: List[str],
     used_ids: Set[str],
+    age_group: str,
 ) -> Optional[Dict[str, Any]]:
     scored: List[tuple[int, Dict[str, Any]]] = []
 
     for ex in EX_DB:
         if ex.get("edzes_resze") != stage:
             continue
+
+        # Korosztály szűrés
+        ajanlott = ex.get("ajanlott_korosztalyok", [])
+        if age_group not in ajanlott:
+            continue
+
+        # Dupla NE legyen ugyanabban az edzésben
         if ex.get("file_name") in used_ids:
             continue
 
@@ -230,6 +284,7 @@ def pick_exercise(
             desired_taktikai,
             desired_technikai,
             desired_kond,
+            age_group,
         )
         scored.append((s, ex))
 
@@ -244,7 +299,7 @@ def pick_exercise(
 
 
 ############################################################
-# 6. DIAGRAM PNG-BE (HA KELL)
+# 7. DIAGRAM PNG-BE (HA KELL)
 ############################################################
 
 def render_diagram_to_png(diagram_spec: Dict[str, Any]) -> BytesIO:
@@ -258,7 +313,7 @@ def render_diagram_to_png(diagram_spec: Dict[str, Any]) -> BytesIO:
 
 
 ############################################################
-# 7. STREAMLIT UI
+# 8. STREAMLIT UI
 ############################################################
 
 st.set_page_config(page_title="Training Blueprint – Edzéstervező", layout="wide")
@@ -292,7 +347,7 @@ defaults = get_default_targets(korosztaly, period_week)
 st.sidebar.subheader("Edzés céljai")
 
 # Fő taktikai cél
-if defaults["fo_taktikai"] in FO_TAKTIKAI_CELOK:
+if defaults["fo_taktikai"] in FO_TAKTIKAI_CELOK and FO_TAKTIKAI_CELOK:
     fo_index = 1 + FO_TAKTIKAI_CELOK.index(defaults["fo_taktikai"])
 else:
     fo_index = 0
@@ -340,8 +395,7 @@ def generate_full_training():
     plan: List[Dict[str, Any]] = []
     used: Set[str] = set()
 
-    # egy edzésrész = 1 gyakorlat
-    stages_order = ["bemelegites", "cel1", "cel2", "cel3"]
+    stages_order = ["bemelegites", "cel1", "cel2", "cel3"]  # 1 edzésrész = 1 gyakorlat
 
     for stage in stages_order:
         ex = pick_exercise(
@@ -351,6 +405,7 @@ def generate_full_training():
             technikai_valasztott,
             kond_valasztott,
             used,
+            korosztaly,
         )
         if ex:
             fid = ex.get("file_name")
@@ -367,6 +422,7 @@ def generate_full_training():
 
 if st.button("🚀 Edzés generálása"):
     generate_full_training()
+
 
 ############################################################
 # GYAKORLAT BLOKK MEGJELENÍTÉSE
@@ -388,7 +444,8 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
     stage = block["stage"]
     ex = block["exercise"]
 
-    st.subheader(f"{stage_label(stage)} – {ex.get('file_name', '')}")
+    # NEM írjuk ki a file_name-et — csak az edzésrész címke
+    st.subheader(stage_label(stage))
 
     cols = st.columns([1, 2])
 
@@ -421,8 +478,10 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
             key=f"desc_{block_index}",
         )
 
-        if st.button(f"🔄 Gyakorlat cseréje ({stage_label(stage)})",
-                     key=f"replace_{block_index}"):
+        if st.button(
+            f"🔄 Gyakorlat cseréje ({stage_label(stage)})",
+            key=f"replace_{block_index}",
+        ):
             new_ex = pick_exercise(
                 stage,
                 fo_taktikai,
@@ -430,6 +489,7 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
                 technikai_valasztott,
                 kond_valasztott,
                 st.session_state.used_ids,
+                korosztaly,
             )
             if new_ex:
                 fid = new_ex.get("file_name")
@@ -506,10 +566,8 @@ def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
     return pdf_bytes
 
 
-if st.button("📥 PDF generálása"):
-    if not st.session_state.plan:
-        st.error("Előbb generálj edzést!")
-    else:
+if st.session_state.plan:
+    try:
         pdf_bytes = create_training_pdf(st.session_state.plan)
         st.download_button(
             "📄 PDF letöltése",
@@ -517,3 +575,7 @@ if st.button("📥 PDF generálása"):
             file_name="edzesterv.pdf",
             mime="application/pdf",
         )
+    except Exception as e:
+        st.error(f"PDF generálási hiba: {e}")
+else:
+    st.info("Előbb generálj edzést, utána tudsz PDF-et letölteni.")
