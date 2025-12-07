@@ -554,17 +554,15 @@ for i, block in enumerate(st.session_state.plan):
 
 
 ############################################################
-# 10. PDF EXPORT (UNICODE FONTTAL)
+# 10. PDF EXPORT (UNICODE + automatikus háttér minden oldalon)
 ############################################################
 
 st.header("📄 PDF Export")
-############################################################
-# PDF osztály háttérrel + logóval minden oldalra
-############################################################
 
+# ---- PDF osztály háttérrel + logóval minden oldalon ----
 class TBPDF(FPDF):
     def header(self):
-        # Háttér minden oldalra
+        # Háttér kép (minden oldalra automatikusan)
         try:
             self.image("pitch_background_8percent.png", x=0, y=0, w=210, h=297)
         except:
@@ -576,7 +574,12 @@ class TBPDF(FPDF):
         except:
             pass
 
-        self.set_y(25)  # innen indulhat a tartalom
+        # Tartalom indulási pozíció
+        self.set_y(25)
+
+    def footer(self):
+        # Alulra is lehetne valami, de most üres
+        pass
 
 
 def create_training_pdf(
@@ -589,160 +592,99 @@ def create_training_pdf(
     kond_cimkek: List[str],
     coach_notes: str,
 ) -> bytes:
+
     pdf = TBPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Unicode fontok hozzáadása (ha elérhetők)
+    # --- Unicode font betöltése ---
     base_font = "Arial"
     try:
         if os.path.exists(DEJAVU_REG) and os.path.exists(DEJAVU_BOLD):
             pdf.add_font("DejaVu", "", DEJAVU_REG, uni=True)
             pdf.add_font("DejaVu", "B", DEJAVU_BOLD, uni=True)
             base_font = "DejaVu"
-    except Exception:
+    except:
         base_font = "Arial"
 
-    # === ÖSSZEFOGLALÓ OLDAL ===
+    # ===============================
+    #   1) ÖSSZEFOGLALÓ OLDAL
+    # ===============================
     pdf.add_page()
-
-    # háttérkép ráhelyezése (teljes oldal)
-    pdf.image("pitch_background.png", x=0, y=0, w=210, h=297)
-
-    # Logó – jobb felső sarok
-    if LOGO_PATH and os.path.exists(LOGO_PATH):
-        try:
-            pdf.image(LOGO_PATH, x=165, y=10, w=30)  # jobb felső sarok
-        except Exception:
-            pass
-
-    # innen induljon a cím (mindig)
-    pdf.set_y(20)
-
-    pdf.set_font(base_font, "B", 16)
-    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
-
 
     pdf.set_font(base_font, "B", 16)
     pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
     pdf.set_font(base_font, "", 12)
-    pdf.ln(2)
+    pdf.ln(3)
     pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {korosztaly}"))
     pdf.multi_cell(0, 6, pdf_safe(f"Periódizációs hét: {period_week}"))
     pdf.multi_cell(0, 6, pdf_safe(f"Fő taktikai cél: {fo_taktikai or '-'}"))
 
     if taktikai_cimkek:
-        pdf.multi_cell(
-            0, 6,
-            pdf_safe("Taktikai címkék: " + ", ".join(taktikai_cimkek))
-        )
+        pdf.multi_cell(0, 6, pdf_safe("Taktikai címkék: " + ", ".join(taktikai_cimkek)))
     if technikai_cimkek:
-        pdf.multi_cell(
-            0, 6,
-            pdf_safe("Technikai címkék: " + ", ".join(technikai_cimkek))
-        )
+        pdf.multi_cell(0, 6, pdf_safe("Technikai címkék: " + ", ".join(technikai_cimkek)))
     if kond_cimkek:
-        pdf.multi_cell(
-            0, 6,
-            pdf_safe("Kondicionális címkék: " + ", ".join(kond_cimkek))
-        )
+        pdf.multi_cell(0, 6, pdf_safe("Kondicionális címkék: " + ", ".join(kond_cimkek)))
 
+    # Általános megjegyzés
     pdf.ln(4)
     pdf.set_font(base_font, "B", 12)
-    pdf.cell(0, 7, pdf_safe("Általános edzői megjegyzés az edzéshez:"), ln=1)
+    pdf.cell(0, 8, pdf_safe("Általános edzői megjegyzés:"), ln=1)
     pdf.set_font(base_font, "", 12)
     pdf.multi_cell(0, 6, pdf_safe(coach_notes or "-"))
 
-    # === GYAKORLATOK: 1 GYAKORLAT = 1 OLDAL ===
+    # ===============================
+    #   2) GYAKORLATOK (1 oldal / drill)
+    # ===============================
     for block in plan:
         stage = block["stage"]
         ex = block["exercise"]
 
         pdf.add_page()
 
-        # háttérkép ráhelyezése (teljes oldal)
-        pdf.image("pitch_background.png", x=0, y=0, w=210, h=297)
-
         pdf.set_font(base_font, "B", 14)
         pdf.cell(0, 8, pdf_safe(stage_label(stage)), ln=1)
-
-        # ---- KÉP FELÜL ----
         pdf.ln(2)
+
+        # ---- Kép vagy diagram ----
         fname = ex.get("file_name")
         img_path = os.path.join(DRILL_IMAGE_FOLDER, fname) if fname else ""
-
         img_drawn = False
+
         if fname and os.path.exists(img_path):
             try:
                 pdf.image(img_path, w=150)
-                pdf.ln(5)
+                pdf.ln(6)
                 img_drawn = True
-            except Exception:
+            except:
                 pass
 
-        if (not img_drawn) and "diagram_v1" in ex and ex["diagram_v1"]:
+        if not img_drawn and "diagram_v1" in ex and ex["diagram_v1"]:
             try:
                 fig = draw_drill(ex["diagram_v1"], show=False)
-                tmp_diagram = "_temp_diagram.png"
-                fig.savefig(tmp_diagram, dpi=120)
-                pdf.image(tmp_diagram, w=150)
-                pdf.ln(5)
-                os.remove(tmp_diagram)
-            except Exception:
+                tmp = "_tmp_drill.png"
+                fig.savefig(tmp, dpi=120)
+                pdf.image(tmp, w=150)
+                pdf.ln(6)
+                os.remove(tmp)
+            except:
                 pdf.set_font(base_font, "", 11)
-                pdf.multi_cell(
-                    0, 6,
-                    pdf_safe("[Diagram / kép beillesztése nem sikerült]")
-                )
+                pdf.multi_cell(0, 6, "[Diagram nem elérhető]")
 
-        # ---- SZÖVEGEK: Leírás, Szervezés, Coaching pontok ----
-        pdf.ln(2)
-        pdf.set_font(base_font, "B", 12)
-        pdf.cell(0, 6, pdf_safe("Leírás:"), ln=1)
-        pdf.set_font(base_font, "", 12)
-        pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "") or "-"))
+        # ---- Szöveges részek ----
+        def section(title, text):
+            pdf.set_font(base_font, "B", 12)
+            pdf.cell(0, 6, pdf_safe(title), ln=1)
+            pdf.set_font(base_font, "", 12)
+            pdf.multi_cell(0, 6, pdf_safe(text or "-"))
+            pdf.ln(2)
 
-        pdf.ln(2)
-        pdf.set_font(base_font, "B", 12)
-        pdf.cell(0, 6, pdf_safe("Szervezés:"), ln=1)
-        pdf.set_font(base_font, "", 12)
-        pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "") or "-"))
+        section("Leírás:", ex.get("description", ""))
+        section("Szervezés:", ex.get("organisation", ""))
+        section("Coaching pontok:", ex.get("coaching_points", ""))
 
-        pdf.ln(2)
-        pdf.set_font(base_font, "B", 12)
-        pdf.cell(0, 6, pdf_safe("Coaching pontok:"), ln=1)
-        pdf.set_font(base_font, "", 12)
-        coaching_txt = ex.get("coaching_points", "") or "-"
-        pdf.multi_cell(0, 6, pdf_safe(coaching_txt))
+    # --- PDF visszaadása ---
+    out = pdf.output(dest="S")
+    return out if isinstance(out, bytes) else out.encode("latin-1", "ignore")
 
-    raw = pdf.output(dest="S")
-    # unicode font esetén ez már bytes, core fontnál lehet str
-    if isinstance(raw, bytes):
-        pdf_bytes = raw
-    else:
-        pdf_bytes = raw.encode("latin-1", "ignore")
-    return pdf_bytes
-
-
-if st.session_state.plan:
-    try:
-        pdf_bytes = create_training_pdf(
-            plan=st.session_state.plan,
-            korosztaly=korosztaly,
-            period_week=period_week,
-            fo_taktikai=fo_taktikai,
-            taktikai_cimkek=taktikai_valasztott,
-            technikai_cimkek=technikai_valasztott,
-            kond_cimkek=kond_valasztott,
-            coach_notes=st.session_state.coach_notes,
-        )
-        st.download_button(
-            "📄 PDF letöltése",
-            data=pdf_bytes,
-            file_name="edzesterv.pdf",
-            mime="application/pdf",
-        )
-    except Exception as e:
-        st.error(f"PDF generálási hiba: {e}")
-else:
-    st.info("Előbb generálj edzést, utána tudsz PDF-et letölteni.")
