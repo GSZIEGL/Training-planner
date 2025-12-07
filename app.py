@@ -587,10 +587,15 @@ def create_training_pdf(
     pdf.add_page()
 
     # Logó – ha van
-    if LOGO_PATH and os.path.exists(LOGO_PATH):
-        try:
-            pdf.image(LOGO_PATH, x=10, y=8, w=30)
-            pdf.set_y(22)
+    # Logó – jobb felső sarok
+if LOGO_PATH and os.path.exists(LOGO_PATH):
+    try:
+        pdf.image(LOGO_PATH, x=165, y=10, w=30)  # jobbra tolva
+    except Exception:
+        pass
+
+pdf.set_y(20)   # cím kezdődjön alatta
+
         except Exception:
             pdf.set_y(10)
     else:
