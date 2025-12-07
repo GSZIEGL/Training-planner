@@ -21,7 +21,7 @@ from pitch_drawer import draw_drill
 
 JSON_PATH = "drill_metadata_with_u7u9.json"
 DRILL_IMAGE_FOLDER = "."      # PNG fájlok mappa
-LOGO_PATH = "bp_logo.png"     # Training Blueprint logó (ugyanabban a mappában)
+LOGO_PATH = "TBP.png"     # Training Blueprint logó (ugyanabban a mappában)
 DEJAVU_REG = "DejaVuSans.ttf"
 DEJAVU_BOLD = "DejaVuSans-Bold.ttf"
 
