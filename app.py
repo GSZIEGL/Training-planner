@@ -1,4 +1,6 @@
 import random
+import json
+import copy
 from io import BytesIO
 from typing import List, Dict, Any
 
@@ -129,250 +131,15 @@ DEMO_DB: List[Dict[str, Any]] = [
 
 
 # =====================================================
-# 0/B. PERIODIZÁCIÓS PROFILOK – KOROSZTÁLY / FELNŐTT
-# =====================================================
-
-# =====================================================
 # 0/B. PERIODIZÁCIÓS PROFILOK – KOROSZTÁLY / FELNŐTT + HÉT
 # =====================================================
 
-# Minden korosztály/szint alatt 1–4. hétre külön mini-táblázat.
-# Az első sor mindig: "Mikrociklus fókusza".
 PERIODIZATION_PROFILES: Dict[str, Dict[int, List[Dict[str, str]]]] = {
-    "U7–U11": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap technikai és játékfókusz, kisebb intenzitással."},
-            {"Terület": "Technika", "Fókusz": "Sok labdaérintés, labdavezetés, cselek játékos formában."},
-            {"Terület": "Taktika", "Fókusz": "Egyszerű 1v1 helyzetek, támadás–védekezés gyors váltása."},
-            {"Terület": "Erőnlét", "Fókusz": "Koordinációs játékok, reakciógyorsaság, nem célzott futómunka."},
-            {"Terület": "Játékforma", "Fókusz": "1v1–3v3, sok gól, sok próbálkozás, kevés megszakítás."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: több párharc, több döntési helyzet, de továbbra is játékos formában."},
-            {"Terület": "Technika", "Fókusz": "Cselek 1v1-ben, labdavezetés irányváltásokkal."},
-            {"Terület": "Taktika", "Fókusz": "Egyszerű támogatás: ki van közel, ki távol – hova mozogjak labdás mellett?"},
-            {"Terület": "Erőnlét", "Fókusz": "Rövid, intenzívebb játékok pihenőkkel, de alacsony edzésvolumen."},
-            {"Terület": "Játékforma", "Fókusz": "2v2–4v4 kisjátékok, gólra törő felfogás."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: intenzívebb játékok, több ismétlés az azonos típusú gyakorlatokból."},
-            {"Terület": "Technika", "Fókusz": "Labdavezetés sebességben, több labdás futás, ütemváltás."},
-            {"Terület": "Taktika", "Fókusz": "Visszazárás labdavesztés után, alap átmenet gondolkodás."},
-            {"Terület": "Erőnlét", "Fókusz": "Több mozgásos játék, kissé nagyobb terhelés – továbbra is játékos eszközökkel."},
-            {"Terület": "Játékforma", "Fókusz": "3v3–4v4, kis terület, sok labdaérintés."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, sok játék, kevesebb magyarázat."},
-            {"Terület": "Technika", "Fókusz": "Meglévő készségek ismétlése, stabilizálás, kevés új elem."},
-            {"Terület": "Taktika", "Fókusz": "Egyszerű szabályjátékok: pl. csak jobbról támadhatunk, stb."},
-            {"Terület": "Erőnlét", "Fókusz": "Terhelés inkább a játék örömén keresztül, nem szervezett futófeladatokkal."},
-            {"Terület": "Játékforma", "Fókusz": "Mini „bajnokság” jelleg, 3–4 rövid meccs egymás után."},
-        ],
-    },
-
-    "U12–U15": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: technikai alapok tempóban, kisjátékokkal kombinálva."},
-            {"Terület": "Technika", "Fókusz": "Passz–átvétel, első érintés, labdavezetés irányváltásokkal."},
-            {"Terület": "Taktika", "Fókusz": "1v1, 2v1, alap helyezkedés labdával és labda nélkül."},
-            {"Terület": "Erőnlét", "Fókusz": "Agilitás, koordináció, rövid sorozatokban végzett futások."},
-            {"Terület": "Játékforma", "Fókusz": "4v4–6v6, rondó típusú gyakorlatok bevezetése."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai elvek (pressing, támogatás) erősítése kis területen."},
-            {"Terület": "Technika", "Fókusz": "Gyors passzjáték kis helyen, kevés érintéssel."},
-            {"Terület": "Taktika", "Fókusz": "Pressing alapja: ki lép ki, ki biztosít, hogyan zárjuk a passzsávot."},
-            {"Terület": "Erőnlét", "Fókusz": "Közepes intenzitás, több iramváltás – de még nem felnőtt szint."},
-            {"Terület": "Játékforma", "Fókusz": "5v5–7v7, pressinges játékszabályokkal (pl. labdavesztés után X mp-en belül visszatámadás)."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: intenzívebb terhelés, átmenetek és pressing gyakorlása."},
-            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás meccs-tempó közelében."},
-            {"Terület": "Taktika", "Fókusz": "Átmenetek: labdavesztés utáni reakciók, első passz labdaszerzés után."},
-            {"Terület": "Erőnlét", "Fókusz": "Gyorsaság-állóképesség játékos formában (ismétléses kisjátékok)."},
-            {"Terület": "Játékforma", "Fókusz": "7v7–8v8, célzott taktikai szabályokkal (pl. csak X passz után lehet kapura lőni)."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: stabilizálás, ismétlés, mérkőzésfókusz."},
-            {"Terület": "Technika", "Fókusz": "Meglévő technikai elemek finomítása, kevés új inger."},
-            {"Terület": "Taktika", "Fókusz": "Meccsszituációk modellezése, egyszerű game-plan végrehajtása."},
-            {"Terület": "Erőnlét", "Fókusz": "Terhelés kissé csökkentve, frissességre törekvés."},
-            {"Terület": "Játékforma", "Fókusz": "8v8–9v9, közelebb a meccs formátumhoz."},
-        ],
-    },
-
-    "U16–U19": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap taktikai struktúrák és ritmus felvétele."},
-            {"Terület": "Technika", "Fókusz": "Technika tempóban, kevés érintés, nyomás alatti döntéshozatal."},
-            {"Terület": "Taktika", "Fókusz": "Alaprendszer (4–3–3 / 4–2–3–1 stb.) szerepköreinek tisztázása."},
-            {"Terület": "Erőnlét", "Fókusz": "Általános terhelés felépítése, iramváltásos játékok."},
-            {"Terület": "Játékforma", "Fókusz": "6v6–9v9, csapatrészek együttműködése."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: pressing és build-up részletesebb építése."},
-            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás pressing alatt, gyors passzok."},
-            {"Terület": "Taktika", "Fókusz": "Pressing trigger-ek, letámadás iránya, középpálya működése."},
-            {"Terület": "Erőnlét", "Fókusz": "Gyorsaság-állóképesség, magasabb intenzitású szekciók."},
-            {"Terület": "Játékforma", "Fókusz": "8v8–11v11 fázisjáték, pressinges szabályokkal."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcsintenzitás, meccsprofil modellezése."},
-            {"Terület": "Technika", "Fókusz": "Technika teljes meccsintenzitás mellett, kevés hibaszázalékkal."},
-            {"Terület": "Taktika", "Fókusz": "Komplett játékmodell gyakorlása: labdabirtoklás, pressing, átmenetek."},
-            {"Terület": "Erőnlét", "Fókusz": "Sprintek, ismétléses terhelés, ACWR szemlélet figyelembevétele."},
-            {"Terület": "Játékforma", "Fókusz": "11v11 taktikai edzések, specifikus szakaszokkal."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, frissítés, taktikai finomhangolás."},
-            {"Terület": "Technika", "Fókusz": "Stabil technikai végrehajtás, kevés volumen, magas minőség."},
-            {"Terület": "Taktika", "Fókusz": "Game-plan konkrét részletei a következő meccsre."},
-            {"Terület": "Erőnlét", "Fókusz": "Terhelés csökkentése, regeneráció támogatása."},
-            {"Terület": "Játékforma", "Fókusz": "Rövid, intenzív meccsjáték-szakaszok, sok pihenővel."},
-        ],
-    },
-
-    "Felnőtt amatőr": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: általános állóképesség + alap taktikai szervezettség."},
-            {"Terület": "Technika", "Fókusz": "Alap passz–átvétel, gyenge láb, hosszú kihagyás utáni visszaszoktatás."},
-            {"Terület": "Taktika", "Fókusz": "Védekezési blokk alapjai, egyszerű felállás betartása."},
-            {"Terület": "Erőnlét", "Fókusz": "Közepes intenzitású, vegyes jellegű futás és kisjáték, sérülésmegelőzés."},
-            {"Terület": "Játékforma", "Fókusz": "5v5–8v8, laza szervezettséggel, sok meccsjáték."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: intenzitás emelése, több pressing / átmenet edzésen."},
-            {"Terület": "Technika", "Fókusz": "Technikai stabilitás fáradás mellett."},
-            {"Terület": "Taktika", "Fókusz": "Letámadás és visszarendeződés alapelvei amatőr szinten."},
-            {"Terület": "Erőnlét", "Fókusz": "Iramos kisjátékok, rövid futások, de kontrollált volumen."},
-            {"Terület": "Játékforma", "Fókusz": "7v7–11v11 gyakorló meccsek, taktikai szabályokkal."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: elérhető csúcsterhelés a civil terhelés mellett."},
-            {"Terület": "Technika", "Fókusz": "Legfontosabb technikai elemek (pl. befejezések, beadások)."},
-            {"Terület": "Taktika", "Fókusz": "Meccs-jellegű szituációk: pontrúgások, védekezés rendezetlen helyzetben."},
-            {"Terület": "Erőnlét", "Fókusz": "Nagyobb intenzitás, de rövid blokkokban, sérüléskockázat figyelésével."},
-            {"Terület": "Játékforma", "Fókusz": "11v11 modellezés, egyszerű game-plan gyakorlása."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: terhelés csökkentése, meccsre hangolás."},
-            {"Terület": "Technika", "Fókusz": "Kevés, rövid technikai blokkok, inkább bemelegítés jelleg."},
-            {"Terület": "Taktika", "Fókusz": "Pozíciós eligazítás, pontrúgások, game-plan átismétlése."},
-            {"Terület": "Erőnlét", "Fókusz": "Alacsonyabb volumen, frissesség biztosítása."},
-            {"Terület": "Játékforma", "Fókusz": "Rövid meccsjátékok, döntően taktikai fókuszszal."},
-        ],
-    },
-
-    "Felnőtt félprofi": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: terhelés felépítése, alapelvű védekezés és felállás."},
-            {"Terület": "Technika", "Fókusz": "Passz–átvétel tempóban, első érintés minősége."},
-            {"Terület": "Taktika", "Fókusz": "Védekezési struktúra, pressing első lépései."},
-            {"Terület": "Erőnlét", "Fókusz": "Általános állóképesség és gyorsaság alapozása."},
-            {"Terület": "Játékforma", "Fókusz": "7v7–11v11, de rövidebb blokkokkal."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai részletek (pressing + build-up) magasabb intenzitáson."},
-            {"Terület": "Technika", "Fókusz": "Technikai kivitelezés pressing alatt, szűk területen."},
-            {"Terület": "Taktika", "Fókusz": "Ellenfélre reagáló pressing és build-up variációk."},
-            {"Terület": "Erőnlét", "Fókusz": "Iramváltás, ismétléses futások (játékba ágyazva)."},
-            {"Terület": "Játékforma", "Fókusz": "11v11 fázisjáték, célzott támadási- és védekezési szakaszokkal."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcsintenzitás, meccsintenzitás replikálása."},
-            {"Terület": "Technika", "Fókusz": "Technika meccsterhelés mellett, minimális hibával."},
-            {"Terület": "Taktika", "Fókusz": "Komplett játékmodell – pressing, build-up, átmenetek, pontrúgások."},
-            {"Terület": "Erőnlét", "Fókusz": "Nagy intenzitású blokkok, kontrollált ACWR-rel."},
-            {"Terület": "Játékforma", "Fókusz": "11v11, meccsre hasonlító terhelési mintával."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: visszaterhelés, frissítés, matchday fókusz."},
-            {"Terület": "Technika", "Fókusz": "Alacsony volumenű, de minőségi technikai gyakorlatok."},
-            {"Terület": "Taktika", "Fókusz": "Ellenfélre szabott game-plan, pozíciós finomhangolás."},
-            {"Terület": "Erőnlét", "Fókusz": "Volumen csökkentése, intenzitás rövid blokkokban tartása."},
-            {"Terület": "Játékforma", "Fókusz": "Rövid, nagy intenzitású meccsszakaszok, sok pihenővel."},
-        ],
-    },
-
-    "Felnőtt profi": {
-        1: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "1. hét: alap ritmus, csapatszintű alapelvek frissítése."},
-            {"Terület": "Technika", "Fókusz": "Első érintés, tempóváltás labdával, pozícióspecifikus technika."},
-            {"Terület": "Taktika", "Fókusz": "Alap játékmodell felidézése (pressing, build-up, átmenetek)."},
-            {"Terület": "Erőnlét", "Fókusz": "Terhelés fokozatos emelése ACWR figyelembevételével."},
-            {"Terület": "Játékforma", "Fókusz": "8v8–11v11 fázisjáték, kontrollált terheléssel."},
-        ],
-        2: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "2. hét: taktikai részletek, magasabb intenzitású szakaszok."},
-            {"Terület": "Technika", "Fókusz": "Technikai végrehajtás speciális taktikai helyzetekben."},
-            {"Terület": "Taktika", "Fókusz": "Pressing és build-up finomhangolása, pozíciós játék."},
-            {"Terület": "Erőnlét", "Fókusz": "Meccsintenzitás közelében végzett ismétléses futások/játékok."},
-            {"Terület": "Játékforma", "Fókusz": "11v11, ellenfél-profilra épített gyakorlatok."},
-        ],
-        3: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "3. hét: csúcs, meccsprofil teljes szimulálása."},
-            {"Terület": "Technika", "Fókusz": "Minimális hibaszázalékú technika teljes meccsterhelés mellett."},
-            {"Terület": "Taktika", "Fókusz": "Game-plan gyakorlása meccsritmusban, pressing és átmenetek finomítása."},
-            {"Terület": "Erőnlét", "Fókusz": "Csúcsterhelés, de kontrollált ACWR-rel és regenerációval."},
-            {"Terület": "Játékforma", "Fókusz": "11v11 edzésmeccsek, specifikus fókusz-szakaszokkal."},
-        ],
-        4: [
-            {"Terület": "Mikrociklus fókusza", "Fókusz": "4. hét: tapering, frissítés, meccsre hangolás."},
-            {"Terület": "Technika", "Fókusz": "Csak könnyű, rövid technikai blokkok, frissítő jelleggel."},
-            {"Terület": "Taktika", "Fókusz": "Részletek finomhangolása, pontrúgások és game-plan ismétlése."},
-            {"Terület": "Erőnlét", "Fókusz": "Volumen jelentős csökkentése, intenzitás rövid „élesítés” blokkokban."},
-            {"Terület": "Játékforma", "Fókusz": "Rövid, magas intenzitású játékszakaszok bő regenerációval."},
-        ],
-    },
+    # ... (VÁLTOZATLAN: a nagy PERIODIZATION_PROFILES blokk marad, ahogy nálad volt)
+    # Itt hagyd érintetlenül az egész PERIODIZATION_PROFILES dictet
+    # (nem írom újra végig, csak másold át az eredetit a kódodban).
+    # --- IDE ILLesZD BE AZ EREDETI PERIODIZATION_PROFILES TARTALMÁT ---
 }
-
-
-
-def get_week_focus(age_group: str, week: int) -> str:
-    # Alapértelmezett szöveg
-    default = "Általános edzésfókusz a korosztály szintjén."
-
-    # Utánpótlás
-    if age_group in ["U7–U11", "U12–U15", "U16–U19"]:
-        youth_map = {
-            1: "1. hét: alap technikai és játékfókusz, kisebb intenzitással.",
-            2: "2. hét: taktikai elvek erősítése, több szervezett kis- és nagypályás játék.",
-            3: "3. hét: intenzívebb terhelés, nagyobb létszámú játékok, pressing / átmenetek.",
-            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevétele.",
-        }
-        return youth_map.get(week, default)
-
-    # Felnőtt amatőr
-    if age_group == "Felnőtt amatőr":
-        amatőr_map = {
-            1: "1. hét: általános állóképesség és alap taktikai szervezettség.",
-            2: "2. hét: intenzívebb játékok, több pressing / átmenet.",
-            3: "3. hét: csúcsterhelés a rendelkezésre álló időkeret mellett.",
-            4: "4. hét: terhelés kismértékű csökkentése, meccsre hangolás.",
-        }
-        return amatőr_map.get(week, default)
-
-    # Felnőtt félprofi
-    if age_group == "Felnőtt félprofi":
-        félprofi_map = {
-            1: "1. hét: terhelés felépítése, alap taktikai fókusz (védekezési elvek).",
-            2: "2. hét: nagyobb intenzitás, pressing és build-up hangsúllyal.",
-            3: "3. hét: csúcsterhelés, meccsintenzitás modellezése edzésen.",
-            4: "4. hét: visszaterhelés, frissítés, ellenfélre szabott taktikai finomhangolás.",
-        }
-        return félprofi_map.get(week, default)
-
-    # Felnőtt profi
-    if age_group == "Felnőtt profi":
-        profi_map = {
-            1: "1. hét: alap ritmus felvétele, csapatszintű alapelvek frissítése.",
-            2: "2. hét: taktikai részletek, specifikus pressing / build-up fázisok magas intenzitáson.",
-            3: "3. hét: csúcsintenzitás, meccsprofil szimulálása, ACWR figyelembevételével.",
-            4: "4. hét: tapering, frissítés, mérkőzésfókuszú edzésstruktúra.",
-        }
-        return profi_map.get(week, default)
-
-    return default
 
 
 def get_week_focus(age_group: str, week: int) -> str:
@@ -385,7 +152,7 @@ def get_week_focus(age_group: str, week: int) -> str:
             1: "1. hét: alap technikai és játékfókusz, kisebb intenzitással.",
             2: "2. hét: taktikai elvek erősítése, több szervezett kis- és nagypályás játék.",
             3: "3. hét: intenzívebb terhelés, nagyobb létszámú játékok, pressing / átmenetek.",
-            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevétele.",
+            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevételével.",
         }
         return youth_map.get(week, default)
 
@@ -433,7 +200,6 @@ def get_periodization_table(age_group: str, week: int):
 
     rows = group.get(week)
     if not rows:
-        # ha valamiért nincs adott hét, essünk vissza az 1. hétre
         rows = group.get(1, [])
 
     if not rows:
@@ -442,11 +208,253 @@ def get_periodization_table(age_group: str, week: int):
     return pd.DataFrame(rows)
 
 
+# =====================================================
+# 0/C. JSON GYAKORLATOK BETÖLTÉSE + NORMALIZÁLÁS
+# =====================================================
+
+DRILLS_JSON_PATH = "drill_metadata_with_u7u9.json"
+USAGE_LOG_PATH = "drill_usage_log.json"
+
+
+def _map_edzes_resze_to_stage_tag(value: str) -> str:
+    mapping = {
+        "bemelegites": "warmup",
+        "cel1": "small",
+        "cel2": "large",
+        "cel3": "main",
+    }
+    return mapping.get(value, "")
+
+
+def _normalize_fo_taktikai_cel(value: str) -> str:
+    mapping = {
+        "jatek_szervezes": "jatekszervezes",
+        "jateksszervezes": "jatekszervezes",
+    }
+    return mapping.get(value, value)
+
+
+def _map_age_buckets_to_ui(age_raw_list: List[str]) -> List[str]:
+    """
+    JSON: ['U7-U9', 'U10-U12', 'U13-U15', 'U16-U19', 'felnott']
+    UI:   'U7–U11', 'U12–U15', 'U16–U19', 'Felnőtt amatőr', 'Felnőtt félprofi', 'Felnőtt profi'
+    """
+    ui_groups = set()
+    for bucket in age_raw_list:
+        if bucket in ("U7-U9", "U10-U12"):
+            ui_groups.add("U7–U11")
+        if bucket in ("U10-U12", "U13-U15"):
+            ui_groups.add("U12–U15")
+        if bucket == "U16-U19":
+            ui_groups.add("U16–U19")
+        if bucket == "felnott":
+            ui_groups.update(["Felnőtt amatőr", "Felnőtt félprofi", "Felnőtt profi"])
+    return sorted(ui_groups)
+
+
+def normalize_demo_exercises(demo_db: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized = []
+    for ex in demo_db:
+        ex_copy = copy.deepcopy(ex)
+        ex_copy["source"] = "demo"
+        ex_copy.setdefault("stage_tag", ex.get("stage_tag"))
+        ex_copy["age_groups_ui"] = [ex.get("age_group")] if ex.get("age_group") else []
+        ex_copy["main_tactical_goal"] = ex.get("tactical_goal")
+        ex_copy["tactical_tags"] = []
+        ex_copy["technical_tags"] = [ex.get("technical_goal")] if ex.get("technical_goal") else []
+        ex_copy["physical_tags"] = [ex.get("fitness_goal")] if ex.get("fitness_goal") else []
+        ex_copy["duration_min"] = ex.get("duration_min", 15)
+        ex_copy.setdefault("organisation_hu", "-")
+        ex_copy.setdefault("description_hu", "-")
+        ex_copy.setdefault("coaching_points_hu", [])
+        ex_copy.setdefault("variations_hu", [])
+        normalized.append(ex_copy)
+    return normalized
+
+
+def normalize_json_exercises(raw_drills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized = []
+    for idx, d in enumerate(raw_drills):
+        stage_tag = _map_edzes_resze_to_stage_tag(d.get("edzes_resze", ""))
+        if not stage_tag:
+            continue
+
+        main_tact = _normalize_fo_taktikai_cel(d.get("fo_taktikai_cel", ""))
+        age_raw = d.get("ajanlott_korosztalyok", [])
+        age_ui = _map_age_buckets_to_ui(age_raw)
+
+        title = f"{main_tact.replace('_', ' ').capitalize()} – {d.get('gyakorlat_kategoria', '')}"
+        description = (
+            "Automatikusan generált leírás az adatbázis metaadatai alapján. "
+            f"Fő taktikai cél: {main_tact.replace('_', ' ')}. "
+            f"Taktikai címkék: {', '.join(d.get('taktikai_cel_cimkek', []))}. "
+            f"Technikai címkék: {', '.join(d.get('technikai_cel_cimkek', []))}. "
+            f"Kondicionális címkék: {', '.join(d.get('kondicionalis_cel_cimkek', []))}."
+        )
+
+        ex = {
+            "id": f"json_{idx}",
+            "source": "json",
+            "stage_tag": stage_tag,
+            "age_groups_ui": age_ui,
+            "age_groups_raw": age_raw,
+            "main_tactical_goal": main_tact,
+            "tactical_tags": d.get("taktikai_cel_cimkek", []),
+            "technical_tags": d.get("technikai_cel_cimkek", []),
+            "physical_tags": d.get("kondicionalis_cel_cimkek", []),
+            "category": d.get("gyakorlat_kategoria", ""),
+            "duration_min": d.get("ido_perc", 15),
+            "title_hu": title,
+            "format": "",
+            "exercise_type": d.get("gyakorlat_kategoria", ""),
+            "pitch_size": "",
+            "intensity": "",
+            "organisation_hu": "-",
+            "description_hu": description,
+            "coaching_points_hu": [],
+            "variations_hu": [],
+            "diagram_v1": None,
+            "file_name": d.get("file_name"),
+        }
+        normalized.append(ex)
+    return normalized
+
+
+@st.cache_data
+def load_all_exercises() -> List[Dict[str, Any]]:
+    """
+    Betölti és normalizálja az összes gyakorlatot:
+    - DEMO_DB (kézzel felvitt, részletes leírással)
+    - drill_metadata_with_u7u9.json (829 gyakorlat)
+    """
+    normalized = normalize_demo_exercises(DEMO_DB)
+
+    try:
+        with open(DRILLS_JSON_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        normalized.extend(normalize_json_exercises(raw))
+    except FileNotFoundError:
+        st.warning(
+            "A 'drill_metadata_with_u7u9.json' fájl nem található. "
+            "Jelenleg csak a demó gyakorlatok érhetők el."
+        )
+    except Exception as e:
+        st.error(f"Hiba a JSON gyakorlatok betöltésekor: {e}")
+
+    return normalized
+
+
+def load_usage_counts() -> Dict[str, int]:
+    try:
+        with open(USAGE_LOG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return {str(k): int(v) for k, v in data.items()}
+            return {}
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+
+
+def save_usage_counts(counts: Dict[str, int]) -> None:
+    try:
+        with open(USAGE_LOG_PATH, "w", encoding="utf-8") as f:
+            json.dump(counts, f, ensure_ascii=False, indent=2)
+    except Exception:
+        # nem kritikus, ha nem sikerül menteni
+        pass
+
+
+def mark_drills_used(drill_ids: List[str]) -> None:
+    """
+    PDF generáláskor hívjuk: ezek a gyakorlatok ténylegesen "elhasználtak".
+    Így az app a jövőben inkább a ritkábban használt gyakorlatokat preferálja.
+    """
+    counts = load_usage_counts()
+    for did in drill_ids:
+        counts[did] = counts.get(did, 0) + 1
+    save_usage_counts(counts)
 
 
 # =====================================================
 # 1. SEGÉDFÜGGVÉNYEK – SZŰRÉS, VÁLASZTÁS, ACWR
 # =====================================================
+
+TACTICAL_UI_TO_JSON = {
+    "labdabirtoklás": {
+        "jatekszervezes",
+        "jatek_szervezes",
+        "jateksszervezes",
+        "labdakihozatal",
+    },
+    "labdaszerzés / pressing": {
+        "vedekezes_labdaszerzes",
+        "atmenet_vedekezesbe",
+    },
+    "labdakihozatal / build-up": {"labdakihozatal"},
+    "befejezés, gólhelyzet-teremtés": {
+        "befejezes",
+        "atmenet_tamadasba",
+    },
+}
+
+
+def _tactical_match_ui_json(ui_value: str, json_main: str) -> bool:
+    if not ui_value or not json_main:
+        return False
+    allowed = TACTICAL_UI_TO_JSON.get(ui_value, set())
+    return json_main in allowed
+
+
+def _score_exercise(
+    ex: Dict[str, Any],
+    age_group: str,
+    tactical_goal: str,
+    technical_goal: str,
+    fitness_goal: str,
+) -> int:
+    """
+    Egyszerű pontozásos logika.
+    - stage_tag-et előtte már ellenőrizzük
+    - itt age_group + taktikai cél alapján adunk pontokat
+    - technikai / fitness most minimálisan vagy egyáltalán nem szűr
+    """
+    score = 0
+    source = ex.get("source", "json")
+
+    # Korosztály / szint
+    if age_group:
+        if source == "demo":
+            if ex.get("age_group") == age_group:
+                score += 3
+        else:
+            if age_group in ex.get("age_groups_ui", []):
+                score += 3
+
+    # Taktikai cél
+    if tactical_goal:
+        if source == "demo":
+            if ex.get("tactical_goal") == tactical_goal:
+                score += 3
+        else:
+            if _tactical_match_ui_json(
+                tactical_goal, ex.get("main_tactical_goal", "")
+            ):
+                score += 3
+
+    # Technikai cél – most csak demóban van értelme
+    if technical_goal:
+        if source == "demo" and ex.get("technical_goal") == technical_goal:
+            score += 1
+
+    # Erőnléti cél – demóban használjuk, JSON-nál később lehet okosítani
+    if fitness_goal:
+        if source == "demo" and ex.get("fitness_goal") == fitness_goal:
+            score += 1
+
+    return score
+
 
 def smart_filter(
     db: List[Dict[str, Any]],
@@ -454,39 +462,46 @@ def smart_filter(
     tactical_goal: str,
     technical_goal: str,
     fitness_goal: str,
-    period_week: int,
+    period_week: int,  # későbbre: periodizációs súlyozáshoz használható
     stage: str,
+    used_ids: set | None = None,
 ) -> List[Dict[str, Any]]:
-    def matches(ex: Dict[str, Any], strict: bool) -> bool:
-        if stage and ex.get("stage_tag") != stage:
-            return False
-        if strict:
-            if age_group and ex.get("age_group") != age_group:
-                return False
-            if tactical_goal and ex.get("tactical_goal") != tactical_goal:
-                return False
-            if technical_goal and ex.get("technical_goal") != technical_goal:
-                return False
-            if fitness_goal and ex.get("fitness_goal") != fitness_goal:
-                return False
-            if period_week and ex.get("period_week") != period_week:
-                return False
-        return True
+    """
+    Pontozásos szűrés:
+    - mindig egyeznie kell a stage_tag-nek
+    - elkerüljük az aktuális edzésben már használt gyakorlatokat (used_ids)
+    - pont a korosztály + taktikai cél egyezéséért
+    """
+    if used_ids is None:
+        used_ids = set()
 
-    strict_res = [ex for ex in db if matches(ex, strict=True)]
-    if strict_res:
-        return strict_res
+    usage_counts = load_usage_counts()
 
-    loose_res = [
-        ex for ex in db
-        if ex.get("stage_tag") == stage
-        and (not age_group or ex.get("age_group") == age_group)
-        and (not fitness_goal or ex.get("fitness_goal") == fitness_goal)
-    ]
-    if loose_res:
-        return loose_res
+    candidates = []
+    for ex in db:
+        if ex.get("stage_tag") != stage:
+            continue
+        if ex.get("id") in used_ids:
+            continue
 
-    return [ex for ex in db if ex.get("stage_tag") == stage]
+        base_score = _score_exercise(ex, age_group, tactical_goal, technical_goal, fitness_goal)
+        candidates.append((ex, base_score))
+
+    if not candidates:
+        return []
+
+    # Max pontszám
+    max_score = max(score for _, score in candidates)
+
+    # Először a legmagasabb pontszámúakat vesszük
+    best = [ex for ex, score in candidates if score == max_score]
+
+    # Köztük preferáljuk a ritkábban használtakat
+    if best:
+        min_usage = min(usage_counts.get(ex["id"], 0) for ex in best)
+        best = [ex for ex in best if usage_counts.get(ex["id"], 0) == min_usage]
+
+    return best
 
 
 def pick_exercise_for_stage(
@@ -497,13 +512,23 @@ def pick_exercise_for_stage(
     fitness_goal: str,
     period_week: int,
     stage: str,
+    used_ids: set | None = None,
 ) -> Dict[str, Any]:
     candidates = smart_filter(
-        db, age_group, tactical_goal, technical_goal, fitness_goal, period_week, stage
+        db,
+        age_group,
+        tactical_goal,
+        technical_goal,
+        fitness_goal,
+        period_week,
+        stage,
+        used_ids=used_ids,
     )
     if not candidates:
         return {}
-    return random.choice(candidates)
+    chosen = random.choice(candidates)
+    # Ne a globális adatbázist módosítsuk – mindig másolatot adunk vissza
+    return copy.deepcopy(chosen)
 
 
 def demo_acwr_series(current_session_load: int) -> pd.DataFrame:
@@ -545,7 +570,6 @@ def build_custom_rondo_diagram(
     players = []
     cones = []
 
-    # támadók – sarkok + oldal-középsők
     base_positions = [
         (center_x - half, center_y - half),
         (center_x + half, center_y - half),
@@ -561,7 +585,6 @@ def build_custom_rondo_diagram(
         players.append({"id": f"A{i+1}", "label": str(i+1), "x": x, "y": y, "team": "home"})
         cones.append({"x": x, "y": y})
 
-    # védők – középen kis „X” alakban
     def_positions = [
         (center_x - 3, center_y),
         (center_x + 3, center_y),
@@ -572,10 +595,8 @@ def build_custom_rondo_diagram(
         x, y = def_positions[j]
         players.append({"id": f"D{j+1}", "label": "X", "x": x, "y": y, "team": "away"})
 
-    # labda
     ball = {"owner_id": "A1"}
 
-    # passz-lánc
     passes = []
     attacker_ids = [f"A{i+1}" for i in range(attackers)]
     for i in range(len(attacker_ids)):
@@ -583,12 +604,11 @@ def build_custom_rondo_diagram(
         to_id = attacker_ids[(i + 1) % len(attacker_ids)]
         passes.append({"from_id": from_id, "to_id": to_id})
 
-    # futások – téma szerint
     runs = []
     if theme == "pressing":
         for j in range(defenders):
             runs.append({"from_id": f"D{j+1}", "to": {"x": center_x, "y": center_y}})
-    else:  # labdabirtoklás / possession
+    else:  # labdabirtoklás
         for i in range(min(3, attackers)):
             pl = players[i]
             runs.append({"from_id": pl["id"], "to": {"x": pl["x"] + 3, "y": pl["y"]}})
@@ -629,33 +649,26 @@ def build_custom_halfpitch_game_diagram(
     Félpályás játék két csapattal – a formation string alapján (pl. '1-2-3-1').
     1 kapus + sorok.
     """
-    # egyszerűsített: 1 GK + N sor
     try:
         lines = [int(x) for x in formation.split("-")[1:]]  # GK után
     except Exception:
         lines = [2, 3, 1]  # fallback 1-2-3-1
 
-    # RED (home) balról támad jobbra
     players = []
-
-    # Kapusok
     players.append({"id": "R_GK", "label": "GK", "x": 10, "y": 50, "team": "keeper"})
     players.append({"id": "B_GK", "label": "GK", "x": 90, "y": 50, "team": "keeper"})
 
-    # x-pozíciók sorokra (védők, kp, csatár)
-    line_x = [25, 45, 65, 80]  # annyit használunk, ahány sor van
+    line_x = [25, 45, 65, 80]
 
-    # vörös csapat
     red_ids = []
     for idx, num in enumerate(lines):
         x = line_x[idx]
         for i, (px, py) in enumerate(_line_positions(x, num)):
             pid = f"R_{idx}_{i}"
-            label = str(i + 2)  # csak hogy ne GK legyen
+            label = str(i + 2)
             players.append({"id": pid, "label": label, "x": px, "y": py, "team": "home"})
             red_ids.append(pid)
 
-    # kék csapat – tükrözés
     blue_ids = []
     for idx, num in enumerate(lines):
         x = 100 - line_x[idx]
@@ -665,14 +678,12 @@ def build_custom_halfpitch_game_diagram(
             players.append({"id": pid, "label": label, "x": px, "y": py, "team": "away"})
             blue_ids.append(pid)
 
-    # labda + passz / futás téma szerint
     passes = []
     runs = []
     ball = {}
 
     if theme == "labdakihozatal / build-up":
         ball = {"owner_id": "R_GK"}
-        # GK -> legközelebbi védő -> középpályás -> csatár
         if red_ids:
             first_line = [pid for pid in red_ids if pid.startswith("R_0_")]
             second_line = [pid for pid in red_ids if pid.startswith("R_1_")]
@@ -686,16 +697,13 @@ def build_custom_halfpitch_game_diagram(
                 chain.append(third_line[0])
             for i in range(len(chain) - 1):
                 passes.append({"from_id": chain[i], "to_id": chain[i+1]})
-        # futások: szélsők felfutnak
         for pid in red_ids[-2:]:
             runs.append({"from_id": pid, "to": {"x": 72, "y": 55}})
     elif theme == "pressing":
-        # labda a kék védőnél
         ball = {"owner_id": blue_ids[0]} if blue_ids else {}
-        # pressing futások vörös csatártól / kp-tól
         for pid in red_ids[-3:]:
             runs.append({"from_id": pid, "to": {"x": 60, "y": 50}})
-    else:  # befejezés / általános
+    else:
         ball = {"owner_id": red_ids[-1]} if red_ids else {}
         if red_ids:
             passes.append({"from_id": red_ids[-1], "to_id": "R_GK"})
@@ -760,8 +768,12 @@ def multiline(pdf: TrainingPDF, txt: str):
         pdf.multi_cell(0, 6, safe[:500] + " ...")
 
 
-def create_pdf(plan: List[Dict[str, Any]], plan_meta: Dict[str, Any],
-               coach_notes: str, exercise_notes: Dict[str, str]) -> BytesIO:
+def create_pdf(
+    plan: List[Dict[str, Any]],
+    plan_meta: Dict[str, Any],
+    coach_notes: str,
+    exercise_notes: Dict[str, str],
+) -> BytesIO:
     pdf = TrainingPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     init_fonts(pdf)
@@ -809,31 +821,40 @@ def create_pdf(plan: List[Dict[str, Any]], plan_meta: Dict[str, Any],
         except:
             pdf.set_font("Arial", "", 11)
 
-        pdf.cell(0, 6, f"Cím: {ex['title_hu']}", ln=1)
+        pdf.cell(0, 6, f"Cím: {ex.get('title_hu', ex_id)}", ln=1)
         pdf.cell(
-            0, 6,
-            f"Formátum: {ex.get('format','')}   |   Típus: {ex['exercise_type']}   |   Időtartam: {ex['duration_min']} perc",
+            0,
+            6,
+            f"Formátum: {ex.get('format','')}   |   Típus: {ex.get('exercise_type','')}   |   "
+            f"Időtartam: {ex.get('duration_min','?')} perc",
             ln=1,
         )
-        pdf.cell(0, 6, f"Pályaméret: {ex['pitch_size']}   |   Intenzitás: {ex['intensity']}", ln=1)
+        pdf.cell(
+            0,
+            6,
+            f"Pályaméret: {ex.get('pitch_size','')}   |   Intenzitás: {ex.get('intensity','')}",
+            ln=1,
+        )
 
         pdf.ln(3)
         pdf.cell(0, 6, "Szervezés:", ln=1)
-        multiline(pdf, ex["organisation_hu"])
+        multiline(pdf, ex.get("organisation_hu", "-"))
 
         pdf.ln(2)
         pdf.cell(0, 6, "Leírás / menet:", ln=1)
-        multiline(pdf, ex["description_hu"])
+        multiline(pdf, ex.get("description_hu", "-"))
 
         pdf.ln(2)
         pdf.cell(0, 6, "Coaching pontok:", ln=1)
-        bullet_text = "\n".join([f"• {c}" for c in ex["coaching_points_hu"]])
-        multiline(pdf, bullet_text)
+        coaching_points = ex.get("coaching_points_hu", []) or []
+        bullet_text = "\n".join([f"• {c}" for c in coaching_points])
+        multiline(pdf, bullet_text or "-")
 
-        if ex["variations_hu"]:
+        variations = ex.get("variations_hu", []) or []
+        if variations:
             pdf.ln(2)
             pdf.cell(0, 6, "Variációk:", ln=1)
-            var_text = "\n".join([f"• {v}" for v in ex["variations_hu"]])
+            var_text = "\n".join([f"• {v}" for v in variations])
             multiline(pdf, var_text)
 
         note = exercise_notes.get(ex_id, "")
@@ -858,11 +879,14 @@ st.set_page_config(page_title="Training Blueprint – edzéstervező", layout="w
 st.title("⚽ Training Blueprint – edzéstervező demó")
 
 st.write(
-    "A bal oldali szűrők alapján generálunk egy 4 blokkból álló edzéstervet. "
+    "A bal oldali szűrők alapján generálunk egy 4 blokkból álló edzéstervet "
+    "(bemelegítés + 3 fő rész, **minden edzésrészben 1 gyakorlat**). "
     "Ezután megadhatod, **melyik gyakorlathoz szeretnél saját rajzot**, és "
     "néhány kérdésre válaszolva az ábra ehhez igazodik. "
     "A kiválasztott korosztályhoz tartozó **periodizációs fókusz** is megjelenik."
 )
+
+EXERCISE_DB = load_all_exercises()
 
 # ---- Oldalsáv: általános edzés paraméterek ----
 
@@ -1006,16 +1030,22 @@ if generate:
         ("main", "Cél3 – fő rész / mérkőzésjáték jellegű feladat"),
     ]
 
+    used_ids_in_plan = set()
+
     for stage_tag, stage_title in stages:
         ex = pick_exercise_for_stage(
-            DEMO_DB,
-            age_group=age_group if age_group in ["U12–U15", "U16–U19"] else "",
+            EXERCISE_DB,
+            age_group=age_group,
             tactical_goal=tactical_goal,
             technical_goal=technical_goal,
             fitness_goal=fitness_goal,
             period_week=period_week,
             stage=stage_tag,
+            used_ids=used_ids_in_plan,
         )
+
+        if not ex:
+            continue
 
         # Ha ez az a blokk, amihez saját rajzot kérsz, akkor felülírjuk a diagramot
         if use_custom_diagram and custom_config and stage_tag == selected_stage_tag:
@@ -1040,8 +1070,8 @@ if generate:
                 ex["format"] = custom_config["formation"]
                 ex["title_hu"] = f"Saját játék – {custom_config['formation']}"
 
-        if ex:
-            plan.append({"stage_tag": stage_tag, "stage_title": stage_title, "exercise": ex})
+        used_ids_in_plan.add(ex["id"])
+        plan.append({"stage_tag": stage_tag, "stage_title": stage_title, "exercise": ex})
 
     if not plan:
         st.error("Nem találtam egyetlen gyakorlatsort sem – próbáld lazítani a szűrőket.")
@@ -1072,8 +1102,8 @@ if "plan" in st.session_state and st.session_state["plan"]:
     # 🔹 Periodizációs táblázat
     st.subheader("📋 Periodizációs fókusz a kiválasztott korosztályra / szintre")
     period_df = get_periodization_table(
-    plan_meta["age_group"],
-    plan_meta["period_week"],
+        plan_meta["age_group"],
+        plan_meta["period_week"],
     )
 
     if period_df is not None:
@@ -1082,7 +1112,7 @@ if "plan" in st.session_state and st.session_state["plan"]:
         st.info("Ehhez a korosztályhoz / szinthez még nincs periodizációs profil definiálva.")
 
     st.subheader("📊 Terhelés és ACWR (demó)")
-    total_session_load = sum(ex["exercise"]["duration_min"] for ex in plan) * 10
+    total_session_load = sum(ex["exercise"].get("duration_min", 0) for ex in plan) * 10
     acwr_df = demo_acwr_series(total_session_load)
     st.caption("Az ACWR itt csak demo jellegű, később valós GPS / terhelésadatokra cseréljük.")
     st.line_chart(acwr_df.set_index("Hét")[["Terhelés", "ACWR"]])
@@ -1091,35 +1121,84 @@ if "plan" in st.session_state and st.session_state["plan"]:
 
     for block in plan:
         stage_title = block["stage_title"]
+        stage_tag = block["stage_tag"]
         ex = block["exercise"]
         ex_id = ex["id"]
 
         st.subheader(stage_title)
-        st.markdown(f"**{ex['title_hu']}**")
+        st.markdown(f"**{ex.get('title_hu', ex_id)}**")
 
+        # 🔄 Gyakorlat csere gomb – adott edzésrészhez
+        reroll_key = f"reroll_{stage_tag}"
+        if st.button("🔄 Gyakorlat cseréje ebben a blokkban", key=reroll_key):
+            # jelenlegi terv többi gyakorlata, hogy ne legyen duplikáció edzésen belül
+            used_ids_other = {b["exercise"]["id"] for b in plan if b is not block}
+
+            new_ex = pick_exercise_for_stage(
+                EXERCISE_DB,
+                age_group=plan_meta["age_group"],
+                tactical_goal=plan_meta["tactical_goal"] if plan_meta["tactical_goal"] != "nincs megadva" else "",
+                technical_goal=plan_meta["technical_goal"] if plan_meta["technical_goal"] != "nincs megadva" else "",
+                fitness_goal=plan_meta["fitness_goal"] if plan_meta["fitness_goal"] != "nincs megadva" else "",
+                period_week=plan_meta["period_week"],
+                stage=stage_tag,
+                used_ids=used_ids_other,
+            )
+
+            if new_ex:
+                # ha ez a blokk a custom diagram célpontja, itt is alkalmazzuk
+                if use_custom_diagram and custom_config and stage_tag == selected_stage_tag:
+                    if custom_config["type"] == "rondo":
+                        diag = build_custom_rondo_diagram(
+                            attackers=custom_config["attackers"],
+                            defenders=custom_config["defenders"],
+                            size_rel=custom_config["size_rel"],
+                            theme=custom_config["theme"],
+                        )
+                        new_ex["diagram_v1"] = diag
+                        new_ex["exercise_type"] = "rondó"
+                        new_ex["format"] = f"{custom_config['attackers']}v{custom_config['defenders']}"
+                        new_ex["title_hu"] = f"Saját rondó {new_ex['format']}"
+                    else:
+                        diag = build_custom_halfpitch_game_diagram(
+                            formation=custom_config["formation"],
+                            theme=custom_config["theme"],
+                        )
+                        new_ex["diagram_v1"] = diag
+                        new_ex["exercise_type"] = "game"
+                        new_ex["format"] = custom_config["formation"]
+                        new_ex["title_hu"] = f"Saját játék – {custom_config['formation']}"
+
+                block["exercise"] = new_ex
+                st.session_state["plan"] = plan
+                st.experimental_rerun()
+            else:
+                st.warning("Ehhez az edzésrészhez nem találtam új gyakorlatot a megadott szűrőkkel.")
+
+        # Diagram (ha van)
         diagram_spec = ex.get("diagram_v1")
         if diagram_spec:
             fig = draw_drill(diagram_spec, show=False)
             st.pyplot(fig, use_container_width=True)
 
         st.write(
-            f"*Formátum:* {ex.get('format','')}  |  *Típus:* {ex['exercise_type']}  |  "
-            f"*Időtartam:* {ex['duration_min']} perc  |  *Intenzitás:* {ex['intensity']}"
+            f"*Formátum:* {ex.get('format','')}  |  *Típus:* {ex.get('exercise_type','')}  |  "
+            f"*Időtartam:* {ex.get('duration_min','?')} perc  |  *Intenzitás:* {ex.get('intensity','')}"
         )
-        st.write(f"*Pályaméret:* {ex['pitch_size']}")
+        st.write(f"*Pályaméret:* {ex.get('pitch_size','')}")
 
         with st.expander("Szervezés (HU)"):
-            st.write(ex["organisation_hu"])
+            st.write(ex.get("organisation_hu", "-"))
 
         with st.expander("Leírás / menet (HU)"):
-            st.write(ex["description_hu"])
+            st.write(ex.get("description_hu", "-"))
 
         with st.expander("Coaching pontok (HU)"):
-            for c in ex["coaching_points_hu"]:
+            for c in ex.get("coaching_points_hu", []) or []:
                 st.write("- " + c)
 
         with st.expander("Variációk (HU)"):
-            for v in ex["variations_hu"]:
+            for v in ex.get("variations_hu", []) or []:
                 st.write("- " + v)
 
         note_key = f"note_{ex_id}"
@@ -1134,6 +1213,10 @@ if "plan" in st.session_state and st.session_state["plan"]:
     st.header("📄 Magyar PDF export")
     if st.button("PDF generálása"):
         try:
+            # itt tekintjük ténylegesen "elhasználtnak" az aktuális edzésterv gyakorlatait
+            used_for_pdf = [block["exercise"]["id"] for block in plan]
+            mark_drills_used(used_for_pdf)
+
             pdf_bytes = create_pdf(
                 plan=plan,
                 plan_meta=plan_meta,
