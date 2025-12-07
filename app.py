@@ -586,6 +586,9 @@ def create_training_pdf(
     # === ÖSSZEFOGLALÓ OLDAL ===
     pdf.add_page()
 
+    # háttérkép ráhelyezése (teljes oldal)
+    pdf.image("pitch_background.png", x=0, y=0, w=210, h=297)
+
     # Logó – jobb felső sarok
     if LOGO_PATH and os.path.exists(LOGO_PATH):
         try:
@@ -637,6 +640,9 @@ def create_training_pdf(
         ex = block["exercise"]
 
         pdf.add_page()
+
+        # háttérkép ráhelyezése (teljes oldal)
+        pdf.image("pitch_background.png", x=0, y=0, w=210, h=297)
 
         pdf.set_font(base_font, "B", 14)
         pdf.cell(0, 8, pdf_safe(stage_label(stage)), ln=1)
