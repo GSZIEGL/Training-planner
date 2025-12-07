@@ -240,7 +240,7 @@ def score_exercise(
     # 🔧 Extra tuning kiskorosztályra: ne toljunk nagy meccsjátékot cel2/cel3-ba
     if age_group in ["U7-U9", "U10-U12"] and stage in ["cel2", "cel3"]:
         if kat == "merkozesjatek":
-            score -= 6  # erős büntetés
+            score -= 999  # gyakorlatilag kizárjuk
         elif kat in ["kisjatek", "rondo"]:
             score += 3
         elif kat in ["jatekszituacio"]:
@@ -272,6 +272,11 @@ def pick_exercise(
         ajanlott = ex.get("ajanlott_korosztalyok", [])
         if age_group not in ajanlott:
             continue
+
+        # Kiskorosztály esetén cel2/cel3-ban ne legyen merkozesjatek egyáltalán
+        if age_group in ["U7-U9", "U10-U12"] and stage in ["cel2", "cel3"]:
+            if ex.get("gyakorlat_kategoria") == "merkozesjatek":
+                continue
 
         # Dupla NE legyen ugyanabban az edzésben
         if ex.get("file_name") in used_ids:
@@ -313,7 +318,31 @@ def render_diagram_to_png(diagram_spec: Dict[str, Any]) -> BytesIO:
 
 
 ############################################################
-# 8. STREAMLIT UI
+# 8. PDF-SAFE SZÖVEG
+############################################################
+
+def pdf_safe(text: Any) -> str:
+    if text is None:
+        return ""
+    s = str(text)
+    # tipikus "rossz" unicode karakterek cseréje
+    replacements = {
+        "–": "-",   # en dash
+        "—": "-",   # em dash
+        "…": "...",
+        "„": '"',
+        "”": '"',
+        "’": "'",
+        "′": "'",
+        "́": "",    # kombináló ékezet, ha becsúszott
+    }
+    for old, new in replacements.items():
+        s = s.replace(old, new)
+    return s
+
+
+############################################################
+# 9. STREAMLIT UI
 ############################################################
 
 st.set_page_config(page_title="Training Blueprint – Edzéstervező", layout="wide")
@@ -519,7 +548,7 @@ def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
     pdf.add_page()
 
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Training Blueprint – Edzésterv", ln=1)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
     pdf.set_font("Arial", "", 12)
 
@@ -529,14 +558,20 @@ def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
 
         pdf.ln(5)
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 8, f"{stage_label(stage)}", ln=1)
+        pdf.cell(0, 8, pdf_safe(stage_label(stage)), ln=1)
 
         pdf.set_font("Arial", "", 12)
 
         # ---- Szövegek ----
-        pdf.multi_cell(0, 6, f"Szervezés: {ex.get('organisation','')}")
+        pdf.multi_cell(
+            0, 6,
+            pdf_safe(f"Szervezés: {ex.get('organisation','')}")
+        )
         pdf.ln(1)
-        pdf.multi_cell(0, 6, f"Leírás: {ex.get('description','')}")
+        pdf.multi_cell(
+            0, 6,
+            pdf_safe(f"Leírás: {ex.get('description','')}")
+        )
         pdf.ln(2)
 
         # ---- Kép / diagram ----
@@ -550,7 +585,7 @@ def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
                 pdf.image(img_path, w=120)  # kisebb kép (kb. 70%)
                 pdf.ln(8)
             except Exception:
-                pdf.multi_cell(0, 6, "[Kép beillesztése nem sikerült]")
+                pdf.multi_cell(0, 6, pdf_safe("[Kép beillesztése nem sikerült]"))
         elif "diagram_v1" in ex and ex["diagram_v1"]:
             try:
                 fig = draw_drill(ex["diagram_v1"], show=False)
@@ -560,9 +595,14 @@ def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
                 pdf.ln(8)
                 os.remove(tmp_diagram)
             except Exception:
-                pdf.multi_cell(0, 6, "[Diagram beillesztése nem sikerült]")
+                pdf.multi_cell(0, 6, pdf_safe("[Diagram beillesztése nem sikerült]"))
 
-    pdf_bytes = pdf.output(dest="S").encode("latin-1", "ignore")
+    raw = pdf.output(dest="S")
+    if isinstance(raw, bytes):
+        pdf_bytes = raw
+    else:
+        # latin-1, de minden problémás karaktert eldobjuk
+        pdf_bytes = raw.encode("latin-1", "ignore")
     return pdf_bytes
 
 
