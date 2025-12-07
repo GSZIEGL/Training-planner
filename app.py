@@ -558,6 +558,25 @@ for i, block in enumerate(st.session_state.plan):
 ############################################################
 
 st.header("📄 PDF Export")
+############################################################
+# PDF osztály háttérrel + logóval minden oldalra
+############################################################
+
+class TBPDF(FPDF):
+    def header(self):
+        # Háttér minden oldalra
+        try:
+            self.image("pitch_background_8percent.png", x=0, y=0, w=210, h=297)
+        except:
+            pass
+
+        # Logó a jobb felső sarokban
+        try:
+            self.image("TBP_pdfsafe.png", x=165, y=10, w=30)
+        except:
+            pass
+
+        self.set_y(25)  # innen indulhat a tartalom
 
 
 def create_training_pdf(
@@ -570,7 +589,7 @@ def create_training_pdf(
     kond_cimkek: List[str],
     coach_notes: str,
 ) -> bytes:
-    pdf = FPDF()
+    pdf = TBPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
     # Unicode fontok hozzáadása (ha elérhetők)
