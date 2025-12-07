@@ -13,7 +13,7 @@ from pitch_drawer import draw_drill   # profi pályarajzoló
 
 
 # =====================================================
-# 0. DEMÓ GYAKORLAT – RONDÓ
+# 0. DEMÓ GYAKORLAT – RONDÓ (MÁR NEM HASZNÁLJUK A VÁLASZTÁSHOZ)
 # =====================================================
 
 DEMO_RONDO_DIAGRAM = {
@@ -50,6 +50,7 @@ DEMO_RONDO_DIAGRAM = {
     "mini_goals": [],
 }
 
+# DEMO_DB megmarad, de most nem használjuk az automata választáshoz
 DEMO_DB: List[Dict[str, Any]] = [
     {
         "id": "warmup_u12_rondo",
@@ -133,7 +134,6 @@ DEMO_DB: List[Dict[str, Any]] = [
 
 # =====================================================
 # 0/B. PERIODIZÁCIÓS PROFILOK – KOROSZTÁLY / FELNŐTT + HÉT
-# (az eredeti dictionary teljes egészében)
 # =====================================================
 
 PERIODIZATION_PROFILES: Dict[str, Dict[int, List[Dict[str, str]]]] = {
@@ -272,7 +272,7 @@ PERIODIZATION_PROFILES: Dict[str, Dict[int, List[Dict[str, str]]]] = {
             {"Terület": "Taktika",
              "Fókusz": "Komplett játékmodell gyakorlása: labdabirtoklás, pressing, átmenetek."},
             {"Terület": "Erőnlét",
-             "Fókusz": "Sprintek, ismétléses terhelés, ACWR szemlélet figyelembevétele."},
+             "Fókusz": "Sprintek, ismétléses terhelés, ACWR szemlélet figyelembevételével."},
             {"Terület": "Játékforma",
              "Fókusz": "11v11 taktikai edzések, specifikus szakaszokkal."},
         ],
@@ -453,7 +453,7 @@ def get_week_focus(age_group: str, week: int) -> str:
             1: "1. hét: alap technikai és játékfókusz, kisebb intenzitással.",
             2: "2. hét: taktikai elvek erősítése, több szervezett kis- és nagypályás játék.",
             3: "3. hét: intenzívebb terhelés, nagyobb létszámú játékok, pressing / átmenetek.",
-            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevétele.",
+            4: "4. hét: mérkőzésfókusz, ismétlés, stabilitás, regeneráció figyelembevételével.",
         }
         return youth_map.get(week, default)
 
@@ -543,26 +543,6 @@ def _map_age_buckets_to_ui(age_raw_list: List[str]) -> List[str]:
     return sorted(ui_groups)
 
 
-def normalize_demo_exercises(demo_db: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    normalized = []
-    for ex in demo_db:
-        ex_copy = copy.deepcopy(ex)
-        ex_copy["source"] = "demo"
-        ex_copy.setdefault("stage_tag", ex.get("stage_tag"))
-        ex_copy["age_groups_ui"] = [ex.get("age_group")] if ex.get("age_group") else []
-        ex_copy["main_tactical_goal"] = ex.get("tactical_goal")
-        ex_copy["tactical_tags"] = []
-        ex_copy["technical_tags"] = [ex.get("technical_goal")] if ex.get("technical_goal") else []
-        ex_copy["physical_tags"] = [ex.get("fitness_goal")] if ex.get("fitness_goal") else []
-        ex_copy["duration_min"] = ex.get("duration_min", 15)
-        ex_copy.setdefault("organisation_hu", "-")
-        ex_copy.setdefault("description_hu", "-")
-        ex_copy.setdefault("coaching_points_hu", [])
-        ex_copy.setdefault("variations_hu", [])
-        normalized.append(ex_copy)
-    return normalized
-
-
 def normalize_json_exercises(raw_drills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized = []
     for idx, d in enumerate(raw_drills):
@@ -574,14 +554,8 @@ def normalize_json_exercises(raw_drills: List[Dict[str, Any]]) -> List[Dict[str,
         age_raw = d.get("ajanlott_korosztalyok", [])
         age_ui = _map_age_buckets_to_ui(age_raw)
 
-        title = f"{main_tact.replace('_', ' ').capitalize()} – {d.get('gyakorlat_kategoria', '')}"
-        description = (
-            "Automatikusan generált leírás az adatbázis metaadatai alapján. "
-            f"Fő taktikai cél: {main_tact.replace('_', ' ')}. "
-            f"Taktikai címkék: {', '.join(d.get('taktikai_cel_cimkek', []))}. "
-            f"Technikai címkék: {', '.join(d.get('technikai_cel_cimkek', []))}. "
-            f"Kondicionális címkék: {', '.join(d.get('kondicionalis_cel_cimkek', []))}."
-        )
+        # Cím lehet valami minimális, de a többi szöveg SZABADON SZERKESZTHETŐ, ezért üresen hagyjuk
+        title = d.get("gyakorlat_nev") or f"{main_tact.replace('_', ' ').capitalize()} – {d.get('gyakorlat_kategoria', '')}"
 
         ex = {
             "id": f"json_{idx}",
@@ -600,8 +574,9 @@ def normalize_json_exercises(raw_drills: List[Dict[str, Any]]) -> List[Dict[str,
             "exercise_type": d.get("gyakorlat_kategoria", ""),
             "pitch_size": "",
             "intensity": "",
-            "organisation_hu": "-",
-            "description_hu": description,
+            # SZABADAN ÍRHATÓK:
+            "organisation_hu": "",
+            "description_hu": "",
             "coaching_points_hu": [],
             "variations_hu": [],
             "diagram_v1": None,
@@ -613,17 +588,15 @@ def normalize_json_exercises(raw_drills: List[Dict[str, Any]]) -> List[Dict[str,
 
 @st.cache_data
 def load_all_exercises() -> List[Dict[str, Any]]:
-    normalized = normalize_demo_exercises(DEMO_DB)
+    # DEMO-kat most nem tesszük bele az automata választásba, hogy csak a saját adatbázisod dolgozzon
+    normalized: List[Dict[str, Any]] = []
 
     try:
         with open(DRILLS_JSON_PATH, "r", encoding="utf-8") as f:
             raw = json.load(f)
         normalized.extend(normalize_json_exercises(raw))
     except FileNotFoundError:
-        st.warning(
-            "A 'drill_metadata_with_u7u9.json' fájl nem található. "
-            "Jelenleg csak a demó gyakorlatok érhetők el."
-        )
+        st.error("A 'drill_metadata_with_u7u9.json' fájl nem található – nincs adatbázis a gyakorlatokhoz.")
     except Exception as e:
         st.error(f"Hiba a JSON gyakorlatok betöltésekor: {e}")
 
@@ -696,34 +669,18 @@ def _score_exercise(
     fitness_goal: str,
 ) -> int:
     score = 0
-    source = ex.get("source", "json")
 
     if age_group:
-        if source == "demo":
-            if ex.get("age_group") == age_group:
-                score += 3
-        else:
-            if age_group in ex.get("age_groups_ui", []):
-                score += 3
+        if age_group in ex.get("age_groups_ui", []):
+            score += 3
 
     if tactical_goal:
-        if source == "demo":
-            if ex.get("tactical_goal") == tactical_goal:
-                score += 3
-        else:
-            if _tactical_match_ui_json(
-                tactical_goal, ex.get("main_tactical_goal", "")
-            ):
-                score += 3
+        if _tactical_match_ui_json(
+            tactical_goal, ex.get("main_tactical_goal", "")
+        ):
+            score += 3
 
-    if technical_goal and source == "demo":
-        if ex.get("technical_goal") == technical_goal:
-            score += 1
-
-    if fitness_goal and source == "demo":
-        if ex.get("fitness_goal") == fitness_goal:
-            score += 1
-
+    # JSON-ben nincs explicit technical/fitness logika most, később bővíthető
     return score
 
 
@@ -1091,11 +1048,11 @@ def create_pdf(
 
         pdf.ln(3)
         pdf.cell(0, 6, "Szervezés:", ln=1)
-        multiline(pdf, ex.get("organisation_hu", "-"))
+        multiline(pdf, ex.get("organisation_hu", ""))
 
         pdf.ln(2)
         pdf.cell(0, 6, "Leírás / menet:", ln=1)
-        multiline(pdf, ex.get("description_hu", "-"))
+        multiline(pdf, ex.get("description_hu", ""))
 
         pdf.ln(2)
         pdf.cell(0, 6, "Coaching pontok:", ln=1)
@@ -1134,9 +1091,8 @@ st.title("⚽ Training Blueprint – edzéstervező demó")
 st.write(
     "A bal oldali szűrők alapján generálunk egy 4 blokkból álló edzéstervet "
     "(bemelegítés + 3 fő rész, **minden edzésrészben 1 gyakorlat**). "
-    "Ezután megadhatod, **melyik gyakorlathoz szeretnél saját rajzot**, és "
-    "néhány kérdésre válaszolva az ábra ehhez igazodik. "
-    "A kiválasztott korosztályhoz tartozó **periodizációs fókusz** is megjelenik."
+    "A gyakorlatok a saját adatbázisodból jönnek, a képek a JSON `file_name` mezői alapján "
+    "töltődnek be. A szervezés, leírás, coaching pontok szabadon szerkeszthetők."
 )
 
 EXERCISE_DB = load_all_exercises()
@@ -1448,20 +1404,46 @@ if "plan" in st.session_state and st.session_state["plan"]:
         )
         st.write(f"*Pályaméret:* {ex.get('pitch_size','')}")
 
-        with st.expander("Szervezés (HU)"):
-            st.write(ex.get("organisation_hu", "-"))
+        # ---- SZABADON SZERKESZTHETŐ SZÖVEGEK ----
+        org_key = f"org_{ex_id}"
+        if org_key not in st.session_state:
+            st.session_state[org_key] = ex.get("organisation_hu", "")
+        ex["organisation_hu"] = st.text_area(
+            "Szervezés (HU)",
+            value=st.session_state[org_key],
+            key=org_key,
+        )
 
-        with st.expander("Leírás / menet (HU)"):
-            st.write(ex.get("description_hu", "-"))
+        desc_key = f"desc_{ex_id}"
+        if desc_key not in st.session_state:
+            st.session_state[desc_key] = ex.get("description_hu", "")
+        ex["description_hu"] = st.text_area(
+            "Leírás / menet (HU)",
+            value=st.session_state[desc_key],
+            key=desc_key,
+        )
 
-        with st.expander("Coaching pontok (HU)"):
-            for c in ex.get("coaching_points_hu", []) or []:
-                st.write("- " + c)
+        coach_points_key = f"cp_{ex_id}"
+        if coach_points_key not in st.session_state:
+            st.session_state[coach_points_key] = "\n".join(ex.get("coaching_points_hu", []))
+        cp_text = st.text_area(
+            "Coaching pontok (soronként egy)",
+            value=st.session_state[coach_points_key],
+            key=coach_points_key,
+        )
+        ex["coaching_points_hu"] = [line.strip() for line in cp_text.split("\n") if line.strip()]
 
-        with st.expander("Variációk (HU)"):
-            for v in ex.get("variations_hu", []) or []:
-                st.write("- " + v)
+        var_key = f"var_{ex_id}"
+        if var_key not in st.session_state:
+            st.session_state[var_key] = "\n".join(ex.get("variations_hu", []))
+        var_text = st.text_area(
+            "Variációk (soronként egy)",
+            value=st.session_state[var_key],
+            key=var_key,
+        )
+        ex["variations_hu"] = [line.strip() for line in var_text.split("\n") if line.strip()]
 
+        # ---- Edzői megjegyzés ----
         note_key = f"note_{ex_id}"
         current_note = st.session_state["exercise_notes"].get(ex_id, "")
         new_note = st.text_area(
