@@ -20,7 +20,8 @@ from pitch_drawer import draw_drill
 ############################################################
 
 JSON_PATH = "drill_metadata_with_u7u9.json"
-DRILL_IMAGE_FOLDER = "."  # PNG fájlok ugyanabban a mappában vannak, ahol az app.py
+DRILL_IMAGE_FOLDER = "."      # PNG fájlok mappa
+LOGO_PATH = "bp_logo.png"     # IDE tedd a Training Blueprint logót (ugyanabba a mappába)
 
 
 @st.cache_data
@@ -33,7 +34,7 @@ EX_DB = load_db()
 
 
 ############################################################
-# 2. SEGÉD: DUPLIKÁCIÓK ELTÁVOLÍTÁSA (kis/nagybetű, space)
+# 2. SEGÉD: DUPLIKÁCIÓK ELTÁVOLÍTÁSA
 ############################################################
 
 def unique_normalized(values: List[str]) -> List[str]:
@@ -327,14 +328,14 @@ def pdf_safe(text: Any) -> str:
     s = str(text)
     # tipikus "rossz" unicode karakterek cseréje
     replacements = {
-        "–": "-",   # en dash
-        "—": "-",   # em dash
+        "–": "-",
+        "—": "-",
         "…": "...",
         "„": '"',
         "”": '"',
         "’": "'",
         "′": "'",
-        "́": "",    # kombináló ékezet, ha becsúszott
+        "́": "",
     }
     for old, new in replacements.items():
         s = s.replace(old, new)
@@ -409,10 +410,20 @@ kond_valasztott = st.sidebar.multiselect(
 )
 
 ############################################################
-# EDZÉS GENERÁLÁSA
+# EDZÉS GENERÁLÁSA + EDZŐI ÁLTALÁNOS MEGJEGYZÉS
 ############################################################
 
 st.header("🧩 Edzés generálása")
+
+# Általános edzői megjegyzés az edzéshez
+if "coach_notes" not in st.session_state:
+    st.session_state.coach_notes = ""
+
+st.session_state.coach_notes = st.text_area(
+    "🧠 Edzői megjegyzés az egész edzéshez",
+    value=st.session_state.coach_notes,
+    placeholder="Ide írhatod az egész edzésre vonatkozó gondolataidat (célok, fontos megjegyzések)…",
+)
 
 if "plan" not in st.session_state:
     st.session_state.plan: List[Dict[str, Any]] = []
@@ -443,6 +454,7 @@ def generate_full_training():
             # induló üres szövegek a szerkeszthető mezőkhöz
             ex.setdefault("organisation", "")
             ex.setdefault("description", "")
+            ex.setdefault("coaching_points", "")
             plan.append({"stage": stage, "exercise": ex})
 
     st.session_state.plan = plan
@@ -473,7 +485,6 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
     stage = block["stage"]
     ex = block["exercise"]
 
-    # NEM írjuk ki a file_name-et — csak az edzésrész címke
     st.subheader(stage_label(stage))
 
     cols = st.columns([1, 2])
@@ -496,15 +507,20 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
 
     # ---- JOBB: SZERKESZTHETŐ SZÖVEGEK ----
     with cols[1]:
+        ex["description"] = st.text_area(
+            "Leírás",
+            value=ex.get("description", ""),
+            key=f"desc_{block_index}",
+        )
         ex["organisation"] = st.text_area(
             "Szervezés",
             value=ex.get("organisation", ""),
             key=f"org_{block_index}",
         )
-        ex["description"] = st.text_area(
-            "Leírás",
-            value=ex.get("description", ""),
-            key=f"desc_{block_index}",
+        ex["coaching_points"] = st.text_area(
+            "Coaching pontok",
+            value=ex.get("coaching_points", ""),
+            key=f"coachp_{block_index}",
         )
 
         if st.button(
@@ -526,6 +542,7 @@ def show_exercise_block(block_index: int, block: Dict[str, Any]):
                     st.session_state.used_ids.add(fid)
                 new_ex.setdefault("organisation", "")
                 new_ex.setdefault("description", "")
+                new_ex.setdefault("coaching_points", "")
                 st.session_state.plan[block_index]["exercise"] = new_ex
                 st.rerun()
             else:
@@ -543,72 +560,142 @@ for i, block in enumerate(st.session_state.plan):
 st.header("📄 PDF Export")
 
 
-def create_training_pdf(plan: List[Dict[str, Any]]) -> bytes:
+def create_training_pdf(
+    plan: List[Dict[str, Any]],
+    korosztaly: str,
+    period_week: int,
+    fo_taktikai: str,
+    taktikai_cimkek: List[str],
+    technikai_cimkek: List[str],
+    kond_cimkek: List[str],
+    coach_notes: str,
+) -> bytes:
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # === ÖSSZEFOGLALÓ OLDAL ===
     pdf.add_page()
+
+    # Logó – ha van
+    if LOGO_PATH and os.path.exists(LOGO_PATH):
+        try:
+            pdf.image(LOGO_PATH, x=10, y=8, w=30)
+            pdf.set_y(22)
+        except Exception:
+            pdf.set_y(10)
+    else:
+        pdf.set_y(10)
 
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
     pdf.set_font("Arial", "", 12)
+    pdf.ln(2)
+    pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {korosztaly}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Periódizációs hét: {period_week}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Fő taktikai cél: {fo_taktikai or '-'}"))
 
+    if taktikai_cimkek:
+        pdf.multi_cell(
+            0, 6,
+            pdf_safe("Taktikai címkék: " + ", ".join(taktikai_cimkek))
+        )
+    if technikai_cimkek:
+        pdf.multi_cell(
+            0, 6,
+            pdf_safe("Technikai címkék: " + ", ".join(technikai_cimkek))
+        )
+    if kond_cimkek:
+        pdf.multi_cell(
+            0, 6,
+            pdf_safe("Kondicionális címkék: " + ", ".join(kond_cimkek))
+        )
+
+    pdf.ln(4)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 7, pdf_safe("Általános edzői megjegyzés az edzéshez:"), ln=1)
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 6, pdf_safe(coach_notes or "-"))
+
+    # === GYAKORLATOK: 1 GYAKORLAT = 1 OLDAL ===
     for block in plan:
         stage = block["stage"]
         ex = block["exercise"]
 
-        pdf.ln(5)
+        pdf.add_page()
+
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 8, pdf_safe(stage_label(stage)), ln=1)
 
-        pdf.set_font("Arial", "", 12)
-
-        # ---- Szövegek ----
-        pdf.multi_cell(
-            0, 6,
-            pdf_safe(f"Szervezés: {ex.get('organisation','')}")
-        )
-        pdf.ln(1)
-        pdf.multi_cell(
-            0, 6,
-            pdf_safe(f"Leírás: {ex.get('description','')}")
-        )
+        # ---- KÉP FELÜL ----
         pdf.ln(2)
-
-        # ---- Kép / diagram ----
-        pdf.set_font("Arial", "", 11)
-
         fname = ex.get("file_name")
         img_path = os.path.join(DRILL_IMAGE_FOLDER, fname) if fname else ""
 
+        img_drawn = False
         if fname and os.path.exists(img_path):
             try:
-                pdf.image(img_path, w=120)  # kisebb kép (kb. 70%)
-                pdf.ln(8)
+                pdf.image(img_path, w=150)
+                pdf.ln(5)
+                img_drawn = True
             except Exception:
-                pdf.multi_cell(0, 6, pdf_safe("[Kép beillesztése nem sikerült]"))
-        elif "diagram_v1" in ex and ex["diagram_v1"]:
+                pass
+
+        if (not img_drawn) and "diagram_v1" in ex and ex["diagram_v1"]:
             try:
                 fig = draw_drill(ex["diagram_v1"], show=False)
                 tmp_diagram = "_temp_diagram.png"
                 fig.savefig(tmp_diagram, dpi=120)
-                pdf.image(tmp_diagram, w=120)
-                pdf.ln(8)
+                pdf.image(tmp_diagram, w=150)
+                pdf.ln(5)
                 os.remove(tmp_diagram)
             except Exception:
-                pdf.multi_cell(0, 6, pdf_safe("[Diagram beillesztése nem sikerült]"))
+                pdf.set_font("Arial", "", 11)
+                pdf.multi_cell(
+                    0, 6,
+                    pdf_safe("[Diagram / kép beillesztése nem sikerült]")
+                )
+
+        # ---- SZÖVEGEK: Leírás, Szervezés, Coaching pontok ----
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 6, pdf_safe("Leírás:"), ln=1)
+        pdf.set_font("Arial", "", 12)
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "") or "-"))
+
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 6, pdf_safe("Szervezés:"), ln=1)
+        pdf.set_font("Arial", "", 12)
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "") or "-"))
+
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 6, pdf_safe("Coaching pontok:"), ln=1)
+        pdf.set_font("Arial", "", 12)
+        coaching_txt = ex.get("coaching_points", "") or "-"
+        pdf.multi_cell(0, 6, pdf_safe(coaching_txt))
 
     raw = pdf.output(dest="S")
     if isinstance(raw, bytes):
         pdf_bytes = raw
     else:
-        # latin-1, de minden problémás karaktert eldobjuk
         pdf_bytes = raw.encode("latin-1", "ignore")
     return pdf_bytes
 
 
 if st.session_state.plan:
     try:
-        pdf_bytes = create_training_pdf(st.session_state.plan)
+        pdf_bytes = create_training_pdf(
+            plan=st.session_state.plan,
+            korosztaly=korosztaly,
+            period_week=period_week,
+            fo_taktikai=fo_taktikai,
+            taktikai_cimkek=taktikai_valasztott,
+            technikai_cimkek=technikai_valasztott,
+            kond_cimkek=kond_valasztott,
+            coach_notes=st.session_state.coach_notes,
+        )
         st.download_button(
             "📄 PDF letöltése",
             data=pdf_bytes,
