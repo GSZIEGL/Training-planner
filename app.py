@@ -586,20 +586,19 @@ def create_training_pdf(
     # === ÖSSZEFOGLALÓ OLDAL ===
     pdf.add_page()
 
-    # Logó – ha van
     # Logó – jobb felső sarok
-if LOGO_PATH and os.path.exists(LOGO_PATH):
-    try:
-        pdf.image(LOGO_PATH, x=165, y=10, w=30)  # jobbra tolva
-    except Exception:
-        pass
-
-pdf.set_y(20)   # cím kezdődjön alatta
-
+    if LOGO_PATH and os.path.exists(LOGO_PATH):
+        try:
+            pdf.image(LOGO_PATH, x=165, y=10, w=30)  # jobb felső sarok
         except Exception:
-            pdf.set_y(10)
-    else:
-        pdf.set_y(10)
+            pass
+
+    # innen induljon a cím (mindig)
+    pdf.set_y(20)
+
+    pdf.set_font(base_font, "B", 16)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
+
 
     pdf.set_font(base_font, "B", 16)
     pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
