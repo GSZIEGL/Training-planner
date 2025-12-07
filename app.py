@@ -336,6 +336,10 @@ def pdf_safe(text: Any) -> str:
         "’": "'",
         "′": "'",
         "́": "",
+        "ő": "o",
+        "Ő": "O",
+        "ű": "u",
+        "Ű": "U",
     }
     for old, new in replacements.items():
         s = s.replace(old, new)
@@ -587,33 +591,33 @@ def create_training_pdf(
         pdf.set_y(10)
 
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint - Edzesterv"), ln=1)
 
     pdf.set_font("Arial", "", 12)
     pdf.ln(2)
-    pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {korosztaly}"))
-    pdf.multi_cell(0, 6, pdf_safe(f"Periódizációs hét: {period_week}"))
-    pdf.multi_cell(0, 6, pdf_safe(f"Fő taktikai cél: {fo_taktikai or '-'}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Korosztaly: {korosztaly}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Periodizacios het: {period_week}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Fo taktikai cel: {fo_taktikai or '-'}"))
 
     if taktikai_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Taktikai címkék: " + ", ".join(taktikai_cimkek))
+            pdf_safe("Taktikai cimkek: " + ", ".join(taktikai_cimkek))
         )
     if technikai_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Technikai címkék: " + ", ".join(technikai_cimkek))
+            pdf_safe("Technikai cimkek: " + ", ".join(technikai_cimkek))
         )
     if kond_cimkek:
         pdf.multi_cell(
             0, 6,
-            pdf_safe("Kondicionális címkék: " + ", ".join(kond_cimkek))
+            pdf_safe("Kondicionalis cimkek: " + ", ".join(kond_cimkek))
         )
 
     pdf.ln(4)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 7, pdf_safe("Általános edzői megjegyzés az edzéshez:"), ln=1)
+    pdf.cell(0, 7, pdf_safe("Altalanos edzoi megjegyzes az edzeshez:"), ln=1)
     pdf.set_font("Arial", "", 12)
     pdf.multi_cell(0, 6, pdf_safe(coach_notes or "-"))
 
@@ -653,19 +657,19 @@ def create_training_pdf(
                 pdf.set_font("Arial", "", 11)
                 pdf.multi_cell(
                     0, 6,
-                    pdf_safe("[Diagram / kép beillesztése nem sikerült]")
+                    pdf_safe("[Diagram / kep beillesztese nem sikerult]")
                 )
 
         # ---- SZÖVEGEK: Leírás, Szervezés, Coaching pontok ----
         pdf.ln(2)
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 6, pdf_safe("Leírás:"), ln=1)
+        pdf.cell(0, 6, pdf_safe("Leiras:"), ln=1)
         pdf.set_font("Arial", "", 12)
         pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "") or "-"))
 
         pdf.ln(2)
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 6, pdf_safe("Szervezés:"), ln=1)
+        pdf.cell(0, 6, pdf_safe("Szervezes:"), ln=1)
         pdf.set_font("Arial", "", 12)
         pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "") or "-"))
 
