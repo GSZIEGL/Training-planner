@@ -306,6 +306,36 @@ for i, block in enumerate(st.session_state.plan):
         ex["coaching_points"] = st.text_area(
             "Coaching pontok", ex.get("coaching_points", ""), key=f"coach_{i}"
         )
+        # --- Gyakorlat cseréje gomb ---
+        if st.button(f"🔄 Gyakorlat cseréje ({stage_label(stage)})", key=f"replace_{i}"):
+
+            # Cél3-ban ha mérkőzésjáték be van kapcsolva → nincs csere
+            if stage == "cel3" and st.session_state.match_override:
+                st.warning("Mérkőzésjáték módban nem cserélhető a gyakorlat.")
+            else:
+                new_ex = pick_exercise(
+                    stage,
+                    fo_taktikai,
+                    taktikai_valasztott,
+                    technikai_valasztott,
+                    kond_valasztott,
+                    st.session_state.used_ids,
+                    age_group
+                )
+
+                if new_ex:
+                    fid = new_ex.get("file_name")
+                    if fid:
+                        st.session_state.used_ids.add(fid)
+
+                    new_ex.setdefault("description", "")
+                    new_ex.setdefault("organisation", "")
+                    new_ex.setdefault("coaching_points", "")
+
+                    st.session_state.plan[i]["exercise"] = new_ex
+                    st.rerun()
+                else:
+                    st.error("Ehhez az edzésrészhez nincs több releváns gyakorlat.")
 
 
 ############################################################
