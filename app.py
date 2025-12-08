@@ -20,596 +20,400 @@ from pitch_drawer import draw_drill
 ############################################################
 
 JSON_PATH = "drill_metadata_with_u7u9.json"
-DRILL_IMAGE_FOLDER = "."            # PNG fájlok mappa
-LOGO_PATH = "TBP_pdfsafe.png"       # logó
-BACKGROUND_PATH = "pitch_background.png"  # háttérkép (8%-os)
+DRILL_IMAGE_FOLDER = "."       # PNG fájlok mappa
+LOGO_PATH = "TBP_pdfsafe.png"  # Training Blueprint logó
+MATCH_IMAGE = "match_game.png" # Minden korosztály mérkőzésjátéka
+BACKGROUND = "pitch_background.png"
+
 DEJAVU_REG = "DejaVuSans.ttf"
 DEJAVU_BOLD = "DejaVuSans-Bold.ttf"
+
 
 @st.cache_data
 def load_db() -> List[Dict[str, Any]]:
     with open(JSON_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        db = json.load(f)
 
-    # --- Egységesítés: jatekszervezes / jatek_szervezes → jatekszervezes ---
-    for ex in data:
-        if ex.get("fo_taktikai_cel", "").lower().replace("_", "") == "jatekszervezes":
-            ex["fo_taktikai_cel"] = "jatekszervezes"
+    # --- Taktikai duplikátumok tisztítása ---
+    fix_map = {
+        "jatek_szervezes": "jatekszervezes",
+        "jatekszervezes": "jatekszervezes",
+        "jatekszervezés": "jatekszervezes",
+        "játékszervezés": "jatekszervezes",
+        "jatekszervezet": "jatekszervezes",
+    }
 
-        fixed = []
-        for c in ex.get("taktikai_cel_cimkek", []):
-            if c.lower().replace("_", "") == "jatekszervezes":
-                fixed.append("jatekszervezes")
-            else:
-                fixed.append(c)
-        ex["taktikai_cel_cimkek"] = fixed
+    for ex in db:
+        main = ex.get("fo_taktikai_cel", "")
+        ex["fo_taktikai_cel"] = fix_map.get(main, main)
 
-    return data
+        fixed_tags = []
+        for t in ex.get("taktikai_cel_cimkek", []):
+            fixed_tags.append(fix_map.get(t, t))
+        ex["taktikai_cel_cimkek"] = fixed_tags
+
+    return db
+
 
 EX_DB = load_db()
 
 
 ############################################################
-# 2. SEGÉD: DUPLIKÁCIÓK ELTÁVOLÍTÁSA
+# 2. Egyszerű kategórialisták
 ############################################################
 
-def unique_normalized(values: List[str]) -> List[str]:
-    seen = set()
-    out = []
-    for v in values:
-        if not v:
-            continue
-        key = str(v).strip().lower()
-        if key not in seen:
-            seen.add(key)
-            out.append(str(v).strip())
-    return out
+TAKTIKAI_CELOK = sorted(set([ex["fo_taktikai_cel"] for ex in EX_DB]))
 
-
-############################################################
-# 3. SZŰRŐLISTÁK A JSON-BŐL (TAKTIKAI)
-############################################################
-
-FO_TAKTIKAI_CELOK = sorted(
-    unique_normalized([ex.get("fo_taktikai_cel", "") for ex in EX_DB])
-)
-
-TAKTIKAI_CIMKEK = sorted(
-    unique_normalized([c for ex in EX_DB for c in ex.get("taktikai_cel_cimkek", [])])
-)
-
-
-############################################################
-# 4. ÚJ FIX TECHNIKAI KATEGÓRIÁK
-############################################################
-
-TECHNIKAI_FIX = [
-    "Passzjáték",
-    "Labdavezetés",
-    "Lövés / Befejezés",
-    "Átvétel",
-    "Csel / 1v1",
-    "Fejelés",
-    "Átvétel–továbbítás",
+TECHNIKAI_SIMPLE = [
+    "passz",
+    "átvétel",
+    "labdavezetés",
+    "lövések",
+    "fejelés"
 ]
 
-# Gyakorlat eredeti technikai címkéit erre projektáljuk rá
-def map_tech_label(ex: Dict[str, Any]) -> List[str]:
-    """
-    Eredeti JSON technikai címkéinek szövegéből becsüljük meg,
-    melyik FIX technikai kategóriába tartozik.
-    """
-    src = " ".join(ex.get("technikai_cel_cimkek", [])).lower()
-
-    out = []
-
-    if any(k in src for k in ["passz", "passzol"]):
-        out.append("Passzjáték")
-
-    if any(k in src for k in ["vezetes", "labdavezet"]):
-        out.append("Labdavezetés")
-
-    if any(k in src for k in ["löv", "bevez", "befeje"]):
-        out.append("Lövés / Befejezés")
-
-    if any(k in src for k in ["atvet", "átvét"]):
-        out.append("Átvétel")
-
-    if any(k in src for k in ["csel", "1v1"]):
-        out.append("Csel / 1v1")
-
-    if any(k in src for k in ["fej", "fejel"]):
-        out.append("Fejelés")
-
-    if any(k in src for k in ["továbbítás", "tovabbit"]):
-        out.append("Átvétel–továbbítás")
-
-    return out or ["Passzjáték"]   # default fallback
-
-
-############################################################
-# 5. ÚJ FIX KONDICIONÁLIS KATEGÓRIÁK
-############################################################
-
-KONDICIONALIS_FIX = [
-    "Gyorsaság",
-    "Irányváltás",
-    "Állóképesség",
-    "Koordináció",
-    "Robbanékonyság",
+KONDIC_SIMPLE = [
+    "gyorsaság",
+    "állóképesség",
+    "erő",
+    "agilitás"
 ]
+
+
 ############################################################
-# 6. PERIODIZÁCIÓ → ALAP CÉLOK
+# 3. PERIODIZÁCIÓ – Egyszerű rendszer
 ############################################################
 
 def get_default_targets(age_group: str, week: int) -> Dict[str, Any]:
 
-    # U7–U12 egyszerűsített modell
-    if age_group in ["U7-U9", "U10-U12"]:
-        if week == 1:
-            return {
-                "fo_taktikai": "jatekszervezes",
-                "taktikai": ["jatekszervezes"],
-                "technikai": ["Passzjáték"],
-                "kondicionalis": ["Koordináció"],
-            }
-        if week == 2:
-            return {
-                "fo_taktikai": "labdakihozatal",
-                "taktikai": ["labdakihozatal"],
-                "technikai": ["Passzjáték"],
-                "kondicionalis": ["Irányváltás"],
-            }
-        if week == 3:
-            return {
-                "fo_taktikai": "befejezes",
-                "taktikai": ["befejezes"],
-                "technikai": ["Lövés / Befejezés"],
-                "kondicionalis": ["Gyorsaság"],
-            }
-        return {
-            "fo_taktikai": "jatekszervezes",
-            "taktikai": ["jatekszervezes"],
-            "technikai": ["Passzjáték"],
-            "kondicionalis": ["Állóképesség"],
-        }
-
-    # U13+ modell
-    if week == 1:
-        return {
-            "fo_taktikai": "labdakihozatal",
-            "taktikai": ["labdakihozatal"],
-            "technikai": ["Passzjáték"],
-            "kondicionalis": ["Koordináció"],
-        }
-    if week == 2:
-        return {
-            "fo_taktikai": "jatekszervezes",
-            "taktikai": ["jatekszervezes"],
-            "technikai": ["Passzjáték"],
-            "kondicionalis": ["Állóképesség"],
-        }
-    if week == 3:
-        return {
-            "fo_taktikai": "befejezes",
-            "taktikai": ["befejezes"],
-            "technikai": ["Lövés / Befejezés"],
-            "kondicionalis": ["Robbanékonyság"],
-        }
+    base = {
+        1: "jatekszervezes",
+        2: "labdakihozatal",
+        3: "befejezes",
+        4: "atmenet"
+    }
     return {
-        "fo_taktikai": "atmenet",
-        "taktikai": ["atmenet_tamadasba"],
-        "technikai": ["Passzjáték"],
-        "kondicionalis": ["Koordináció"],
+        "fo_taktikai": base.get(week, "jatekszervezes"),
+        "taktikai": [base.get(week, "jatekszervezes")],
+        "technikai": ["passz"],
+        "kondicionalis": ["állóképesség"]
     }
 
 
 ############################################################
-# 7. PONTOZÁS — frissítve az új FIX technikai és kondicionális rendszerhez
+# 4. GYAKORLAT PONTOZÁSA (egyszerű)
 ############################################################
 
-def score_exercise(
-    ex: Dict[str, Any],
-    stage: str,
-    desired_fo: str,
-    desired_taktikai: List[str],
-    desired_tech: List[str],
-    desired_kond: List[str],
-    age_group: str,
-) -> int:
-
+def score_exercise(ex, stage, desired_fo, tact, tech, kond, age_group):
     score = 0
 
-    # Fő taktikai
     if ex.get("fo_taktikai_cel") == desired_fo:
         score += 5
 
-    # Taktikai címkék
-    ex_takt = ex.get("taktikai_cel_cimkek", [])
-    for t in desired_taktikai:
-        if t in ex_takt:
+    for t in tact:
+        if t in ex.get("taktikai_cel_cimkek", []):
             score += 2
-
-    # FIX technikai kategóriák
-    ex_fixed_tech = map_tech_label(ex)
-    for t in desired_tech:
-        if t in ex_fixed_tech:
-            score += 1
-
-    # Kondicionális FIX
-    ex_fixed_kond = []
-    kc = " ".join(ex.get("kondicionalis_cel_cimkek", [])).lower()
-    if "gyors" in kc:
-        ex_fixed_kond.append("Gyorsaság")
-    if "irany" in kc:
-        ex_fixed_kond.append("Irányváltás")
-    if "allo" in kc:
-        ex_fixed_kond.append("Állóképesség")
-    if "koordin" in kc:
-        ex_fixed_kond.append("Koordináció")
-    if "robb" in kc:
-        ex_fixed_kond.append("Robbanékonyság")
-
-    for c in desired_kond:
-        if c in ex_fixed_kond:
-            score += 1
-
-    # Stage preferenciák
-    kat = ex.get("gyakorlat_kategoria", "")
-
-    if stage == "bemelegites":
-        if kat in ["rondo", "technikazas"]:
-            score += 4
-        if kat == "kisjatek":
-            score += 1
-
-    if stage == "cel1":
-        if kat in ["kisjatek", "rondo"]:
-            score += 4
-        if kat == "jatekszituacio":
-            score += 1
-
-    if stage == "cel2":
-        if kat in ["jatekszituacio"]:
-            score += 4
-        if kat == "kisjatek":
-            score += 1
-
-    if stage == "cel3":
-        if kat in ["jatekszituacio", "merkozesjatek"]:
-            score += 5
-
-    # Kiskorosztály tiltások
-    if age_group in ["U7-U9", "U10-U12"] and stage in ["cel2", "cel3"]:
-        if kat == "merkozesjatek":
-            score -= 999
 
     return score
 
 
 ############################################################
-# 8. GYAKORLAT KIVÁLASZTÁSA (MÉRKŐZÉSJÁTÉK OPCIÓVAL)
+# 5. GYAKORLAT KIVÁLASZTÁSA
 ############################################################
 
-MATCH_IMAGES = {
-    "U7-U9": "match_small.png",
-    "U10-U12": "match_small.png",
-    "U13-U15": "match_7v7.png",
-    "U16-U19": "match_11v11.png",
-    "felnott": "match_11v11.png",
-}
+def pick_exercise(stage, desired_fo, tact, tech, kond, used_ids, age_group):
 
-def pick_exercise(
-    stage: str,
-    desired_fo: str,
-    takt: List[str],
-    tech: List[str],
-    kond: List[str],
-    used_ids: Set[str],
-    age_group: str,
-    force_match=False,
-) -> Optional[Dict[str, Any]]:
-
-    # --- ha mérkőzésjáték be van pipálva Cél3-ban ---
-    if stage == "cel3" and force_match:
-        return {
-            "file_name": MATCH_IMAGES.get(age_group, "match_11v11.png"),
-            "gyakorlat_kategoria": "merkozesjatek",
-            "diagram_v1": None,
-            "organisation": "",
-            "description": "",
-            "coaching_points": "",
-            "edzes_resze": "cel3",
-        }
-
-    # Normál gyakorlatok
-    scored = []
+    candidates = []
     for ex in EX_DB:
         if ex.get("edzes_resze") != stage:
             continue
 
-        # korosztály
+        # korosztály szűrés
         if age_group not in ex.get("ajanlott_korosztalyok", []):
             continue
 
         # duplikáció tiltása
-        if ex.get("file_name") in used_ids:
+        if ex["file_name"] in used_ids:
             continue
 
-        s = score_exercise(ex, stage, desired_fo, takt, tech, kond, age_group)
-        scored.append((s, ex))
+        s = score_exercise(ex, stage, desired_fo, tact, tech, kond, age_group)
+        candidates.append((s, ex))
 
-    if not scored:
+    if not candidates:
         return None
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    best_score = scored[0][0]
-    best = [ex for s, ex in scored if s == best_score]
-
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_score = candidates[0][0]
+    best = [ex for s, ex in candidates if s == best_score]
     return random.choice(best)
-############################################################
-# 9. STREAMLIT UI
-############################################################
 
-st.set_page_config(page_title="Training Blueprint – Edzéstervező", layout="wide")
-st.title("⚽ Edzéstervező – Training Blueprint")
 
 ############################################################
-# OLDALSÁV – KOROSZTÁLY, HÉT, CÉLOK
+# 6. PDF-SAFE
+############################################################
+
+def pdf_safe(text):
+    if not text:
+        return ""
+    return str(text).replace("…", "...").replace("’", "'")
+
+
+############################################################
+# 7. STREAMLIT FELÜLET
+############################################################
+
+st.set_page_config(page_title="Training Blueprint", layout="wide")
+st.title("⚽ Training Blueprint – Edzéstervező")
+
+
+############################################################
+# Oldalsáv — beállítások
 ############################################################
 
 st.sidebar.header("Edzés paraméterei")
 
-korosztaly = st.sidebar.selectbox(
+age_group = st.sidebar.selectbox(
     "Korosztály",
-    ["U7-U9", "U10-U12", "U13-U15", "U16-U19", "felnott"],
+    ["U7-U9", "U10-U12", "U13-U15", "U16-U19", "felnott"]
 )
 
-period_week = st.sidebar.number_input("Periódizációs hét", 1, 4, 1)
+week = st.sidebar.number_input("Periodizációs hét", 1, 4, 1)
 
-defaults = get_default_targets(korosztaly, period_week)
-
-############################################################
-# CÉLOK – Taktikai / Technikai / Kondicionális
-############################################################
-
-st.sidebar.subheader("Edzés céljai")
-
-# Fő taktikai
-fo_index = (
-    1 + FO_TAKTIKAI_CELOK.index(defaults["fo_taktikai"])
-    if defaults["fo_taktikai"] in FO_TAKTIKAI_CELOK else 0
-)
+defaults = get_default_targets(age_group, week)
 
 fo_taktikai = st.sidebar.selectbox(
     "Fő taktikai cél",
-    [""] + FO_TAKTIKAI_CELOK,
-    index=fo_index,
+    options=TAKTIKAI_CELOK,
+    index=TAKTIKAI_CELOK.index(defaults["fo_taktikai"])
 )
 
-# Taktikai címkék
 taktikai_valasztott = st.sidebar.multiselect(
     "Taktikai címkék",
-    TAKTIKAI_CIMKEK,
-    default=[t for t in defaults["taktikai"] if t in TAKTIKAI_CIMKEK],
+    options=TAKTIKAI_CELOK,
+    default=defaults["taktikai"]
 )
 
-# Technikai – FIX kategóriák
 technikai_valasztott = st.sidebar.multiselect(
-    "Technikai kategóriák",
-    TECHNIKAI_FIX,
-    default=[t for t in defaults["technikai"] if t in TECHNIKAI_FIX],
+    "Technikai fókusz",
+    options=TECHNIKAI_SIMPLE,
+    default=["passz"]
 )
 
-# Kondicionális – FIX kategóriák
 kond_valasztott = st.sidebar.multiselect(
-    "Kondicionális célok",
-    KONDICIONALIS_FIX,
-    default=[t for t in defaults["kondicionalis"] if t in KONDICIONALIS_FIX],
+    "Kondicionális fókusz",
+    options=KONDIC_SIMPLE,
+    default=["állóképesség"]
 )
 
+
 ############################################################
-# EDZÉS GENERÁLÁSA + EDZŐI MEGJEGYZÉS
+# Edzői össz-megjegyzés
 ############################################################
 
-st.header("🧩 Edzés generálása")
+coach_notes = st.text_area("🧠 Edzői össz-megjegyzés az edzéshez")
 
-if "coach_notes" not in st.session_state:
-    st.session_state.coach_notes = ""
 
-st.session_state.coach_notes = st.text_area(
-    "🧠 Általános edzői megjegyzés az egész edzéshez",
-    value=st.session_state.coach_notes,
-)
+############################################################
+# Edzés generálása
+############################################################
 
 if "plan" not in st.session_state:
     st.session_state.plan = []
 if "used_ids" not in st.session_state:
     st.session_state.used_ids = set()
+if "match_override" not in st.session_state:
+    st.session_state.match_override = False
 
-# --- Mérkőzésjáték opció Cél3-hoz ---
-force_match = st.checkbox("Cél 3: Mérkőzésjáték (automatikus meccskép)")
 
-def generate_full_training():
+def generate_plan():
     plan = []
     used = set()
 
-    for stage in ["bemelegites", "cel1", "cel2", "cel3"]:
+    stages = ["bemelegites", "cel1", "cel2", "cel3"]
+
+    for stg in stages:
         ex = pick_exercise(
-            stage,
+            stg,
             fo_taktikai,
             taktikai_valasztott,
             technikai_valasztott,
             kond_valasztott,
             used,
-            korosztaly,
-            force_match = (stage == "cel3" and force_match)
+            age_group
         )
         if ex:
-            fid = ex.get("file_name")
-            if fid:
-                used.add(fid)
-            ex.setdefault("organisation", "")
+            used.add(ex["file_name"])
             ex.setdefault("description", "")
+            ex.setdefault("organisation", "")
             ex.setdefault("coaching_points", "")
-            plan.append({"stage": stage, "exercise": ex})
+            plan.append({"stage": stg, "exercise": ex})
 
     st.session_state.plan = plan
     st.session_state.used_ids = used
 
 
 if st.button("🚀 Edzés generálása"):
-    generate_full_training()
+    generate_plan()
 
 
 ############################################################
-# GYAKORLAT BLOKKOK MEGJELENÍTÉSE
+# Gyakorlatok megjelenítése
 ############################################################
 
-st.header("📋 Generált edzés")
-
-def stage_label(stage):
+def stage_label(s):
     return {
         "bemelegites": "Bemelegítés",
         "cel1": "Cél 1",
         "cel2": "Cél 2",
-        "cel3": "Cél 3",
-    }.get(stage, stage)
+        "cel3": "Cél 3"
+    }.get(s, s)
 
-def show_exercise_block(i, block):
+
+st.header("📋 Generált edzés")
+
+for i, block in enumerate(st.session_state.plan):
     stage = block["stage"]
     ex = block["exercise"]
 
     st.subheader(stage_label(stage))
+
     cols = st.columns([1, 2])
 
-    # ---- BAL oldali kép ----
     with cols[0]:
-        fname = ex.get("file_name")
-        if fname:
-            path = os.path.join(DRILL_IMAGE_FOLDER, fname)
-            if os.path.exists(path):
-                st.image(path, width=300)
-            else:
-                st.warning("Kép nem található.")
-
-    # ---- JOBB oldali szerkeszthető mezők ----
-    with cols[1]:
-        ex["description"] = st.text_area("Leírás", ex.get("description", ""), key=f"desc_{i}")
-        ex["organisation"] = st.text_area("Szervezés", ex.get("organisation", ""), key=f"org_{i}")
-        ex["coaching_points"] = st.text_area("Coaching pontok", ex.get("coaching_points", ""), key=f"cp_{i}")
-
-        if st.button(f"🔄 Gyakorlat cseréje ({stage_label(stage)})", key=f"rep_{i}"):
-            new_ex = pick_exercise(
-                stage,
-                fo_taktikai,
-                taktikai_valasztott,
-                technikai_valasztott,
-                kond_valasztott,
-                st.session_state.used_ids,
-                korosztaly,
-                force_match = (stage == "cel3" and force_match)
+        # --- Mérkőzésjáték felülírás cél3-ban ---
+        if stage == "cel3":
+            st.session_state.match_override = st.checkbox(
+                "Mérkőzésjáték használata",
+                key=f"match_{i}"
             )
-            if new_ex:
-                fid = new_ex.get("file_name")
-                if fid:
-                    st.session_state.used_ids.add(fid)
-                new_ex.setdefault("organisation", "")
-                new_ex.setdefault("description", "")
-                new_ex.setdefault("coaching_points", "")
-                st.session_state.plan[i]["exercise"] = new_ex
-                st.rerun()
-            else:
-                st.error("Nincs több ilyen szűrésnek megfelelő gyakorlat.")
 
-for i, block in enumerate(st.session_state.plan):
-    show_exercise_block(i, block)
+        if stage == "cel3" and st.session_state.match_override:
+            st.image(MATCH_IMAGE, width=300)
+        else:
+            img = ex.get("file_name")
+            if img and os.path.exists(img):
+                st.image(img, width=300)
+            else:
+                st.warning("Nincs kép ehhez a gyakorlathoz.")
+
+    with cols[1]:
+        ex["description"] = st.text_area(
+            "Leírás", ex.get("description", ""), key=f"desc_{i}"
+        )
+        ex["organisation"] = st.text_area(
+            "Szervezés", ex.get("organisation", ""), key=f"org_{i}"
+        )
+        ex["coaching_points"] = st.text_area(
+            "Coaching pontok", ex.get("coaching_points", ""), key=f"coach_{i}"
+        )
 
 
 ############################################################
-# 10. PDF EXPORT (háttér minden oldalon)
+# PDF Export – Automatikus háttér minden oldalon
 ############################################################
 
 st.header("📄 PDF Export")
 
+
 class TBPDF(FPDF):
     def header(self):
         try:
-            self.image(BACKGROUND_PATH, x=0, y=0, w=210, h=297)
+            self.image(BACKGROUND, x=0, y=0, w=210, h=297)
         except:
             pass
         try:
-            self.image(LOGO_PATH, x=165, y=10, w=28)
+            self.image(LOGO_PATH, x=165, y=10, w=30)
         except:
             pass
-        self.set_y(28)
+        self.set_y(25)
 
-def create_training_pdf():
+
+def create_pdf():
     pdf = TBPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # fonts
+    # betűtípus
     base = "Arial"
     try:
-        if os.path.exists(DEJAVU_REG):
-            pdf.add_font("DejaVu", "", DEJAVU_REG, uni=True)
-            pdf.add_font("DejaVu", "B", DEJAVU_BOLD, uni=True)
-            base = "DejaVu"
+        pdf.add_font("DejaVu", "", DEJAVU_REG, uni=True)
+        pdf.add_font("DejaVu", "B", DEJAVU_BOLD, uni=True)
+        base = "DejaVu"
     except:
         pass
 
+    # --- Címlap ---
     pdf.add_page()
     pdf.set_font(base, "B", 16)
-    pdf.cell(0, 10, "Training Blueprint – Edzésterv", ln=1)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
     pdf.set_font(base, "", 12)
-    pdf.multi_cell(0, 6, f"Korosztály: {korosztaly}")
-    pdf.multi_cell(0, 6, f"Periódizációs hét: {period_week}")
-    pdf.multi_cell(0, 6, f"Fő taktikai cél: {fo_taktikai or '-'}")
+    pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {age_group}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Periodizációs hét: {week}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Fő taktikai cél: {fo_taktikai}"))
 
-    pdf.ln(3)
+    pdf.ln(4)
     pdf.set_font(base, "B", 12)
-    pdf.cell(0, 7, "Általános edzői megjegyzés:", ln=1)
+    pdf.cell(0, 8, "Edzői megjegyzés:", ln=1)
     pdf.set_font(base, "", 12)
-    pdf.multi_cell(0, 6, st.session_state.coach_notes or "-")
+    pdf.multi_cell(0, 6, pdf_safe(coach_notes))
 
-    # --- drills ---
+    # --- Gyakorlatok ---
     for block in st.session_state.plan:
+        pdf.add_page()
+
         stage = block["stage"]
         ex = block["exercise"]
 
-        pdf.add_page()
         pdf.set_font(base, "B", 14)
-        pdf.cell(0, 8, stage_label(stage), ln=1)
+        pdf.cell(0, 10, pdf_safe(stage_label(stage)), ln=1)
 
-        fname = ex.get("file_name")
-        if fname:
-            p = os.path.join(DRILL_IMAGE_FOLDER, fname)
-            if os.path.exists(p):
-                pdf.image(p, w=150)
-                pdf.ln(5)
+        pdf.ln(3)
 
-        def section(title, text):
-            pdf.set_font(base, "B", 12)
-            pdf.cell(0, 6, title, ln=1)
-            pdf.set_font(base, "", 12)
-            pdf.multi_cell(0, 6, text or "-")
-            pdf.ln(2)
+        # kép
+        if stage == "cel3" and st.session_state.match_override:
+            img = MATCH_IMAGE
+        else:
+            img = ex["file_name"]
 
-        section("Leírás:", ex.get("description", ""))
-        section("Szervezés:", ex.get("organisation", ""))
-        section("Coaching pontok:", ex.get("coaching_points", ""))
+        if img and os.path.exists(img):
+            try:
+                pdf.image(img, w=150)
+            except:
+                pdf.multi_cell(0, 6, "Kép nem tölthető be.")
 
-    out = pdf.output(dest="S")
-    return out if isinstance(out, bytes) else out.encode("latin-1", "ignore")
+        pdf.ln(5)
+
+        # Leírás
+        pdf.set_font(base, "B", 12)
+        pdf.cell(0, 6, "Leírás:", ln=1)
+        pdf.set_font(base, "", 12)
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "")))
+        pdf.ln(2)
+
+        # Szervezés
+        pdf.set_font(base, "B", 12)
+        pdf.cell(0, 6, "Szervezés:", ln=1)
+        pdf.set_font(base, "", 12)
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "")))
+        pdf.ln(2)
+
+        # Coaching pontok
+        pdf.set_font(base, "B", 12)
+        pdf.cell(0, 6, "Coaching pontok:", ln=1)
+        pdf.set_font(base, "", 12)
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("coaching_points", "")))
+
+    raw = pdf.output(dest="S")
+    return raw if isinstance(raw, bytes) else raw.encode("latin-1", "ignore")
+
 
 if st.session_state.plan:
-    pdf_bytes = create_training_pdf()
+    pdf_bytes = create_pdf()
     st.download_button(
         "📄 PDF letöltése",
         data=pdf_bytes,
         file_name="edzesterv.pdf",
-        mime="application/pdf",
+        mime="application/pdf"
     )
 else:
-    st.info("Előbb generálj edzést.")
+    st.info("Előbb generálj edzést!")
