@@ -11,6 +11,9 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 
+# Ha később kell:
+# from pitch_drawer import draw_drill
+
 
 ############################################################
 # 0. STREAMLIT ALAP
@@ -247,8 +250,10 @@ def save_weekly_workload(coach_id: str,
                          team_id: str,
                          week: int,
                          workload: float):
-    """Ha ugyanarra a hétre többször generálsz edzést,
-       ÖSSZEADJA a workloadokat (több edzés/hét)."""
+    """
+    Ha ugyanarra a hétre többször generálsz edzést,
+    ÖSSZEADJA a workloadokat (több edzés/hét).
+    """
     if coach_id not in ACWR_DB:
         ACWR_DB[coach_id] = {}
     if team_id not in ACWR_DB[coach_id]:
@@ -518,6 +523,9 @@ if st.button("🚀 Edzés generálása"):
 st.header("📋 Generált edzés")
 
 for i, block in enumerate(st.session_state.plan):
+    if "stage" not in block or "exercise" not in block:
+        continue
+
     stage = block["stage"]
     ex = block["exercise"]
 
@@ -575,13 +583,12 @@ for i, block in enumerate(st.session_state.plan):
                     new_ex.setdefault("organisation", "")
                     new_ex.setdefault("coaching_points", "")
                     st.session_state.plan[i]["exercise"] = new_ex
-                    st.experimental_rerun()
                 else:
                     st.error("Ehhez az edzésrészhez nincs több releváns gyakorlat.")
 
 
 ############################################################
-# 17. ACWR MEGJELÍTÉS
+# 17. ACWR MEGJELÍTÉS + FIGYELMEZTETÉS
 ############################################################
 
 st.header("📈 ACWR trend")
@@ -592,6 +599,17 @@ col1, col2, col3 = st.columns(3)
 col1.metric("Akut terhelés", f"{acute:.1f}" if acute is not None else "N/A")
 col2.metric("Krónikus terhelés (4 hét átlaga)", f"{chronic:.1f}" if chronic is not None else "N/A")
 col3.metric("ACWR", f"{acwr:.2f}" if acwr is not None else "N/A")
+
+# ACWR figyelmeztetés
+if acwr is not None:
+    if acwr < 0.8:
+        st.warning("ACWR < 0.8 – alulterhelés / detraining zóna.")
+    elif 0.8 <= acwr <= 1.3:
+        st.success("ACWR 0.8–1.3 – optimális terhelési zóna. ✅")
+    elif 1.3 < acwr <= 1.5:
+        st.warning("ACWR 1.3–1.5 – emelkedett terhelés, fokozott odafigyelés javasolt.")
+    else:
+        st.error("ACWR > 1.5 – magas terhelési spike, sérüléskockázat! 🔴")
 
 plot_acwr_history(coach_id, team_id)
 
@@ -656,6 +674,9 @@ def create_pdf():
 
     # Gyakorlatok
     for block in st.session_state.plan:
+        if "stage" not in block or "exercise" not in block:
+            continue
+
         pdf.add_page()
 
         stage = block["stage"]
