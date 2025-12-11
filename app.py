@@ -1,19 +1,22 @@
 ############################################################
-#  app.py — Training Blueprint Edzéstervező (RÉSZ 1/3)
-#  Periodizáció + Adatmodell + Workload számítás
+#  app.py — Training Blueprint Edzéstervező (FULL)
 ############################################################
 
 import os
 import json
 import random
-from io import BytesIO
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Set
 
 import streamlit as st
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 
-from pitch_drawer import draw_drill
+
+############################################################
+# 0. STREAMLIT ALAP
+############################################################
+
+st.set_page_config(page_title="Training Blueprint", layout="wide")
 
 
 ############################################################
@@ -21,7 +24,7 @@ from pitch_drawer import draw_drill
 ############################################################
 
 JSON_PATH = "drill_metadata_with_u7u9.json"
-ACWR_HISTORY_PATH = "acwr_history.json"        # új: ACWR tartós tárolása
+ACWR_HISTORY_PATH = "acwr_history.json"        # ACWR tartós tárolása
 DRILL_IMAGE_FOLDER = "."
 LOGO_PATH = "TBP_pdfsafe.png"
 MATCH_IMAGE = "match_game.png"
@@ -32,25 +35,17 @@ DEJAVU_BOLD = "DejaVuSans-Bold.ttf"
 
 
 ############################################################
-# 2. EDZŐ / CSAPAT IDENTITÁS (egyszerű mód – B)
+# 2. SEGÉDFÜGGVÉNYEK
 ############################################################
 
-# Sidebar – coach és team beírása
-st.sidebar.header("Edző és csapat")
-
-coach_name = st.sidebar.text_input("Edző neve", value="Edző Béla")
-team_name = st.sidebar.text_input("Csapat neve", value="U13 Akadémia")
-
-# Generálunk egyszerű ID-t
-coach_id = f"coach_{abs(hash(coach_name)) % 10**8}"
-team_id = f"team_{abs(hash(team_name)) % 10**8}"
-
-st.sidebar.write(f"Edző ID: {coach_id}")
-st.sidebar.write(f"Csapat ID: {team_id}")
+def pdf_safe(text):
+    if not text:
+        return ""
+    return str(text).replace("…", "...").replace("’", "'")
 
 
 ############################################################
-# 3. EDZŐI ADATOKHOZ ACWR HISTORY BETÖLTÉSE
+# 3. ACWR HISTORY BETÖLTÉSE / MENTÉSE
 ############################################################
 
 def load_acwr_history() -> Dict[str, Any]:
@@ -62,21 +57,17 @@ def load_acwr_history() -> Dict[str, Any]:
     except:
         return {}
 
+
 def save_acwr_history(data: Dict[str, Any]):
     with open(ACWR_HISTORY_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 ACWR_DB = load_acwr_history()
-if coach_id not in ACWR_DB:
-    ACWR_DB[coach_id] = {}          # coach > team > week > workload
-if team_id not in ACWR_DB[coach_id]:
-    ACWR_DB[coach_id][team_id] = {}
-
 
 
 ############################################################
-# 4. Taktikai címkék egységesítése (ékezetes!)
+# 4. TAKTIKAI CÍMKÉK NORMALIZÁLÁSA
 ############################################################
 
 TACTICAL_CANONICAL = {
@@ -104,7 +95,6 @@ def load_db() -> List[Dict[str, Any]]:
         db = json.load(f)
 
     for ex in db:
-
         # fő taktikai cél normalizálása
         raw = ex.get("fo_taktikai_cel", "").lower()
         ex["fo_taktikai_cel"] = TACTICAL_CANONICAL.get(raw, raw)
@@ -123,7 +113,7 @@ EX_DB = load_db()
 
 
 ############################################################
-# 5. TECHNIKAI ÉS KONDI CÉLOK LISTÁJA (hozzáadva: cselezés)
+# 5. TECHNIKAI ÉS KONDI CÉLOK
 ############################################################
 
 TECHNIKAI_SIMPLE = [
@@ -132,7 +122,7 @@ TECHNIKAI_SIMPLE = [
     "labdavezetés",
     "lövések",
     "fejelés",
-    "cselezés"              # új elem
+    "cselezés"  # új elem
 ]
 
 KONDIC_SIMPLE = [
@@ -144,7 +134,7 @@ KONDIC_SIMPLE = [
 
 
 ############################################################
-# 6. PERIODIZÁCIÓ – C MODELL (taktikai + technikai + kondival összehangolva)
+# 6. PERIODIZÁCIÓS TÁBLA (4 hetes ciklus)
 ############################################################
 
 PERIOD_TABLE = {
@@ -174,14 +164,16 @@ PERIOD_TABLE = {
     }
 }
 
+# tiszta taktikai opciók (nincs duplikáció)
+TACTICAL_OPTIONS = ["játékszervezés", "labdakihozatal", "befejezés", "átmenet"]
+
 
 def get_period_targets(week: int) -> Dict[str, Any]:
-    """4 hetes összehangolt periodizáció visszaadása."""
     return PERIOD_TABLE.get(week, PERIOD_TABLE[1])
 
 
 ############################################################
-# 7. WORKLOAD SZÁMÍTÁS (Model 1 szerint)
+# 7. WORKLOAD SZÁMÍTÁS (Model 1)
 ############################################################
 
 BASE_LOAD = {
@@ -209,13 +201,9 @@ KONDI_BONUS = {
 
 
 def compute_workload(week: int,
-                      stages: List[str],
-                      tech: List[str],
-                      kondi: List[str]) -> float:
-    """
-    Ad egy becsült terhelési értéket a generált edzésre
-    (Model 1: fix load + bonus + weekly multiplier).
-    """
+                     stages: List[str],
+                     tech: List[str],
+                     kondi: List[str]) -> float:
     period = get_period_targets(week)
     mult = period["szorzo"]
 
@@ -227,8 +215,128 @@ def compute_workload(week: int,
     kond_bonus = sum(KONDI_BONUS.get(k, 0) for k in kondi)
 
     return (base + tech_bonus + kond_bonus) * mult
+
+
 ############################################################
-# 8. GYAKORLAT PONTOZÁSA
+# 8. EDZŐ ÉS CSAPAT ADATOK
+############################################################
+
+st.sidebar.header("Edző és csapat")
+
+coach_name = st.sidebar.text_input("Edző neve", value="Edző Béla")
+team_name = st.sidebar.text_input("Csapat neve", value="U13 Akadémia")
+
+coach_id = f"coach_{abs(hash(coach_name)) % 10**8}"
+team_id = f"team_{abs(hash(team_name)) % 10**8}"
+
+st.sidebar.write(f"Edző ID: {coach_id}")
+st.sidebar.write(f"Csapat ID: {team_id}")
+
+# ACWR_DB struktúra biztosítása
+if coach_id not in ACWR_DB:
+    ACWR_DB[coach_id] = {}
+if team_id not in ACWR_DB[coach_id]:
+    ACWR_DB[coach_id][team_id] = {}
+
+
+############################################################
+# 9. ACWR FUNKCIÓK
+############################################################
+
+def save_weekly_workload(coach_id: str,
+                         team_id: str,
+                         week: int,
+                         workload: float):
+    """Ha ugyanarra a hétre többször generálsz edzést,
+       ÖSSZEADJA a workloadokat (több edzés/hét)."""
+    if coach_id not in ACWR_DB:
+        ACWR_DB[coach_id] = {}
+    if team_id not in ACWR_DB[coach_id]:
+        ACWR_DB[coach_id][team_id] = {}
+
+    week_key = str(week)
+    prev = ACWR_DB[coach_id][team_id].get(week_key, 0.0)
+    ACWR_DB[coach_id][team_id][week_key] = prev + workload
+
+    save_acwr_history(ACWR_DB)
+
+
+def compute_acwr(coach_id: str,
+                 team_id: str,
+                 current_week: int):
+    team_weeks = ACWR_DB.get(coach_id, {}).get(team_id, {})
+
+    if not team_weeks:
+        return None, None, None
+
+    acute = team_weeks.get(str(current_week))
+    if acute is None:
+        return None, None, None
+
+    chronic_values = []
+    for w in range(current_week - 4, current_week):
+        if w > 0:
+            val = team_weeks.get(str(w))
+            if val is not None:
+                chronic_values.append(val)
+
+    if len(chronic_values) == 0:
+        chronic = None
+        acwr = None
+    else:
+        chronic = sum(chronic_values) / len(chronic_values)
+        acwr = acute / chronic if chronic > 0 else None
+
+    return acute, chronic, acwr
+
+
+def plot_acwr_history(coach_id: str, team_id: str):
+    team_weeks = ACWR_DB.get(coach_id, {}).get(team_id, {})
+
+    if not team_weeks:
+        st.info("Nincs ACWR adat még ehhez a csapathoz.")
+        return
+
+    weeks = sorted([int(w) for w in team_weeks.keys()])
+    loads = [team_weeks[str(w)] for w in weeks]
+
+    acwr_values = []
+    for w in weeks:
+        _, _, acwr = compute_acwr(coach_id, team_id, w)
+        acwr_values.append(acwr)
+
+    fig, ax1 = plt.subplots(figsize=(8, 4))
+
+    ax1.plot(weeks, loads, marker="o", label="Workload")
+    ax1.set_xlabel("Hét")
+    ax1.set_ylabel("Workload")
+
+    ax2 = ax1.twinx()
+    ax2.plot(weeks, acwr_values, marker="s", label="ACWR")
+    ax2.set_ylabel("ACWR")
+
+    # optimális zóna
+    ax2.axhspan(0.8, 1.3, alpha=0.2)
+
+    ax1.grid(True, alpha=0.3)
+    st.pyplot(fig)
+
+
+############################################################
+# 10. SEGÉD — STAGE LABEL
+############################################################
+
+def stage_label(s: str) -> str:
+    return {
+        "bemelegites": "Bemelegítés",
+        "cel1": "Cél 1",
+        "cel2": "Cél 2",
+        "cel3": "Cél 3"
+    }.get(s, s)
+
+
+############################################################
+# 11. GYAKORLAT PONTOZÁSA / VÁLASZTÁSA
 ############################################################
 
 def score_exercise(ex,
@@ -239,26 +347,15 @@ def score_exercise(ex,
                    kond: List[str],
                    age_group: str) -> int:
     score = 0
-
-    # Fő taktikai cél egyezés
     if ex.get("fo_taktikai_cel") == desired_fo:
         score += 5
-
-    # Taktikai címkék egyezése
     for t in tact:
         if t in ex.get("taktikai_cel_cimkek", []):
             score += 2
-
-    # Korosztály relevancia – már a load_db szűri, de adhatunk bónuszt
     if age_group in ex.get("ajanlott_korosztalyok", []):
         score += 1
-
     return score
 
-
-############################################################
-# 9. GYAKORLAT KIVÁLASZTÁSA
-############################################################
 
 def pick_exercise(stage: str,
                   desired_fo: str,
@@ -271,15 +368,10 @@ def pick_exercise(stage: str,
     candidates = []
 
     for ex in EX_DB:
-        # része-e az adott blokkornak
         if ex.get("edzes_resze") != stage:
             continue
-
-        # korosztály szűrés
         if age_group not in ex.get("ajanlott_korosztalyok", []):
             continue
-
-        # duplikáció tiltása
         if ex["file_name"] in used_ids:
             continue
 
@@ -289,7 +381,6 @@ def pick_exercise(stage: str,
     if not candidates:
         return None
 
-    # legjobb pontszámú gyakorlatok közül véletlen választás
     candidates.sort(key=lambda x: x[0], reverse=True)
     best_score = candidates[0][0]
     best = [ex for s, ex in candidates if s == best_score]
@@ -298,7 +389,7 @@ def pick_exercise(stage: str,
 
 
 ############################################################
-# 10. STREAMLIT SESSIONS – PLAN TÁROLÁSA
+# 12. SESSIONS
 ############################################################
 
 if "plan" not in st.session_state:
@@ -309,11 +400,6 @@ if "used_ids" not in st.session_state:
 
 if "match_override" not in st.session_state:
     st.session_state.match_override = False
-
-
-############################################################
-# 11. EDZÉS GENERÁLÓ FUNKCIÓ
-############################################################
 
 STAGES = ["bemelegites", "cel1", "cel2", "cel3"]
 
@@ -337,7 +423,6 @@ def generate_plan(fo_taktikai,
             used,
             age_group
         )
-
         if ex:
             used.add(ex["file_name"])
             ex.setdefault("description", "")
@@ -350,97 +435,7 @@ def generate_plan(fo_taktikai,
 
 
 ############################################################
-# 12. WORKLOAD MENTÉSE AZ ADOTT HÉTRE (ACWR-hez)
-############################################################
-
-def save_weekly_workload(coach_id: str,
-                         team_id: str,
-                         week: int,
-                         workload: float):
-
-    if coach_id not in ACWR_DB:
-        ACWR_DB[coach_id] = {}
-    if team_id not in ACWR_DB[coach_id]:
-        ACWR_DB[coach_id][team_id] = {}
-
-    ACWR_DB[coach_id][team_id][str(week)] = workload
-    save_acwr_history(ACWR_DB)
-
-
-############################################################
-# 13. ACWR SZÁMÍTÁS
-############################################################
-
-def compute_acwr(coach_id: str,
-                  team_id: str,
-                  current_week: int):
-
-    team_weeks = ACWR_DB.get(coach_id, {}).get(team_id, {})
-
-    if not team_weeks:
-        return None, None, None
-
-    # akut = aktuális hét workloadja
-    acute = team_weeks.get(str(current_week))
-    if acute is None:
-        return None, None, None
-
-    # chronic = előző 4 hét átlaga
-    chronic_values = []
-    for w in range(current_week - 4, current_week):
-        if w > 0:
-            val = team_weeks.get(str(w))
-            if val is not None:
-                chronic_values.append(val)
-
-    if len(chronic_values) == 0:
-        chronic = None
-        acwr = None
-    else:
-        chronic = sum(chronic_values) / len(chronic_values)
-        acwr = acute / chronic if chronic > 0 else None
-
-    return acute, chronic, acwr
-
-
-############################################################
-# 14. ACWR GRAFIKON
-############################################################
-
-def plot_acwr_history(coach_id: str, team_id: str):
-    team_weeks = ACWR_DB.get(coach_id, {}).get(team_id, {})
-
-    if not team_weeks:
-        st.info("Nincs ACWR adat még ehhez a csapathoz.")
-        return
-
-    weeks = sorted([int(w) for w in team_weeks.keys()])
-    loads = [team_weeks[str(w)] for w in weeks]
-
-    # ACWR görbe
-    acwr_values = []
-    for w in weeks:
-        _, _, acwr = compute_acwr(coach_id, team_id, w)
-        acwr_values.append(acwr)
-
-    fig, ax1 = plt.subplots(figsize=(8, 4))
-
-    ax1.plot(weeks, loads, marker="o", label="Workload", color="blue")
-    ax1.set_xlabel("Hét")
-    ax1.set_ylabel("Workload")
-
-    ax2 = ax1.twinx()
-    ax2.plot(weeks, acwr_values, marker="s", label="ACWR", color="red")
-    ax2.set_ylabel("ACWR")
-
-    # optimális zóna megjelenítés
-    ax2.axhspan(0.8, 1.3, alpha=0.2, color="green")
-
-    ax1.grid(True, alpha=0.3)
-
-    st.pyplot(fig)
-############################################################
-# 15. UI — FELSŐ PERIODIZÁCIÓS TÁBLA
+# 13. UI — FELSŐ RÉSZ: CÍM + PERIODIZÁCIÓ
 ############################################################
 
 st.title("⚽ Training Blueprint – Edzéstervező")
@@ -458,7 +453,7 @@ colD.metric("Intenzitási szorzó", period_targets["szorzo"])
 
 
 ############################################################
-# 16. OLDALSÁV TOVÁBBI BEÁLLÍTÁSOK
+# 14. OLDALSÁV – EDZÉS PARAMÉTEREI
 ############################################################
 
 age_group = st.sidebar.selectbox(
@@ -466,16 +461,15 @@ age_group = st.sidebar.selectbox(
     ["U7-U9", "U10-U12", "U13-U15", "U16-U19", "felnott"]
 )
 
-# A periodizációs héthez alapértelmezett taktikai cél
 fo_taktikai = st.sidebar.selectbox(
     "Fő taktikai cél",
-    options=list(TACTICAL_CANONICAL.values()),
-    index=list(TACTICAL_CANONICAL.values()).index(period_targets["taktikai"])
+    options=TACTICAL_OPTIONS,
+    index=TACTICAL_OPTIONS.index(period_targets["taktikai"])
 )
 
 taktikai_valasztott = st.sidebar.multiselect(
     "Taktikai címkék",
-    options=list(TACTICAL_CANONICAL.values()),
+    options=TACTICAL_OPTIONS,
     default=[period_targets["taktikai"]]
 )
 
@@ -491,11 +485,11 @@ kond_valasztott = st.sidebar.multiselect(
     default=[period_targets["kondi"]]
 )
 
-coach_notes = st.text_area("🧠 Edzői össz-megjegyzés")
+coach_notes = st.text_area("🧠 Edzői össz-megjegyzés az edzéshez")
 
 
 ############################################################
-# 17. GOMB — EDZÉS GENERÁLÁSA
+# 15. EDZÉS GENERÁLÁS
 ############################################################
 
 if st.button("🚀 Edzés generálása"):
@@ -506,7 +500,7 @@ if st.button("🚀 Edzés generálása"):
         kond_valasztott,
         age_group
     )
-    # workload számítása és mentése
+
     workload = compute_workload(
         week,
         STAGES,
@@ -514,11 +508,11 @@ if st.button("🚀 Edzés generálása"):
         kond_valasztott
     )
     save_weekly_workload(coach_id, team_id, week, workload)
-    st.success(f"Edzés elkészült! Workload: {workload:.1f}")
+    st.success(f"Edzés elkészült! Workload erre az edzésre: {workload:.1f}")
 
 
 ############################################################
-# 18. EDZÉSBLOKKOK MEGJELENÍTÉSE
+# 16. EDZÉS BLOKKOK MEGJELENÍTÉSE
 ############################################################
 
 st.header("📋 Generált edzés")
@@ -527,18 +521,11 @@ for i, block in enumerate(st.session_state.plan):
     stage = block["stage"]
     ex = block["exercise"]
 
-    st.subheader({
-        "bemelegites": "Bemelegítés",
-        "cel1": "Cél 1",
-        "cel2": "Cél 2",
-        "cel3": "Cél 3"
-    }[stage])
+    st.subheader(stage_label(stage))
 
     colL, colR = st.columns([1, 2])
 
-    # bal oldal: kép
     with colL:
-        # mérkőzésjáték felülírás cél3 blokknál
         if stage == "cel3":
             st.session_state.match_override = st.checkbox(
                 "Mérkőzésjáték használata",
@@ -554,7 +541,6 @@ for i, block in enumerate(st.session_state.plan):
             else:
                 st.warning("Nincs kép ehhez a gyakorlathoz.")
 
-    # jobb oldal: szöveg
     with colR:
         ex["description"] = st.text_area(
             "Leírás", ex.get("description", ""), key=f"desc_{i}"
@@ -566,10 +552,10 @@ for i, block in enumerate(st.session_state.plan):
             "Coaching pontok", ex.get("coaching_points", ""), key=f"coach_{i}"
         )
 
-        if st.button(f"🔄 Gyakorlat cseréje ({stage})", key=f"replace_{i}"):
+        if st.button(f"🔄 Gyakorlat cseréje ({stage_label(stage)})", key=f"replace_{i}"):
 
             if stage == "cel3" and st.session_state.match_override:
-                st.warning("Mérkőzésjáték módban nem cserélhető.")
+                st.warning("Mérkőzésjáték módban nem cserélhető a gyakorlat.")
             else:
                 new_ex = pick_exercise(
                     stage,
@@ -582,44 +568,36 @@ for i, block in enumerate(st.session_state.plan):
                 )
 
                 if new_ex:
-                    st.session_state.used_ids.add(new_ex["file_name"])
+                    fid = new_ex.get("file_name")
+                    if fid:
+                        st.session_state.used_ids.add(fid)
                     new_ex.setdefault("description", "")
                     new_ex.setdefault("organisation", "")
                     new_ex.setdefault("coaching_points", "")
                     st.session_state.plan[i]["exercise"] = new_ex
-                    st.rerun()
+                    st.experimental_rerun()
                 else:
-                    st.error("Nincs több releváns gyakorlat.")
+                    st.error("Ehhez az edzésrészhez nincs több releváns gyakorlat.")
 
 
 ############################################################
-# 19. ACWR MEGJELENÍTÉSE
+# 17. ACWR MEGJELÍTÉS
 ############################################################
 
 st.header("📈 ACWR trend")
 
 acute, chronic, acwr = compute_acwr(coach_id, team_id, week)
 
-if acute is not None:
-    st.metric("Akut terhelés", f"{acute:.1f}")
-else:
-    st.metric("Akut terhelés", "N/A")
-
-if chronic is not None:
-    st.metric("Krónikus terhelés (4 hét átlaga)", f"{chronic:.1f}")
-else:
-    st.metric("Krónikus terhelés", "N/A")
-
-if acwr is not None:
-    st.metric("ACWR", f"{acwr:.2f}")
-else:
-    st.metric("ACWR", "N/A")
+col1, col2, col3 = st.columns(3)
+col1.metric("Akut terhelés", f"{acute:.1f}" if acute is not None else "N/A")
+col2.metric("Krónikus terhelés (4 hét átlaga)", f"{chronic:.1f}" if chronic is not None else "N/A")
+col3.metric("ACWR", f"{acwr:.2f}" if acwr is not None else "N/A")
 
 plot_acwr_history(coach_id, team_id)
 
 
 ############################################################
-# 20. PDF EXPORT — új periodizációs táblával
+# 18. PDF EXPORT
 ############################################################
 
 st.header("📄 PDF Export")
@@ -642,44 +620,41 @@ def create_pdf():
     pdf = TBPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # betűtípus
     base = "Arial"
     try:
-        pdf.add_font("DejaVu", "", DEJAVVU_REG, uni=True)
+        pdf.add_font("DejaVu", "", DEJAVU_REG, uni=True)
         pdf.add_font("DejaVu", "B", DEJAVU_BOLD, uni=True)
         base = "DejaVu"
     except:
         pass
 
-    # ------------ Címlap ----------------
+    # Címlap
     pdf.add_page()
     pdf.set_font(base, "B", 16)
-    pdf.cell(0, 10, "Training Blueprint – Edzésterv", ln=1)
+    pdf.cell(0, 10, pdf_safe("Training Blueprint – Edzésterv"), ln=1)
 
     pdf.set_font(base, "", 12)
-    pdf.multi_cell(0, 6, f"Edző: {coach_name}")
-    pdf.multi_cell(0, 6, f"Csapat: {team_name}")
-    pdf.multi_cell(0, 6, f"Korosztály: {age_group}")
-    pdf.multi_cell(0, 6, f"Hét: {week}")
-
-    # Periodizációs tábla
-    pdf.ln(4)
-    pdf.set_font(base, "B", 12)
-    pdf.cell(0, 8, "Heti periodizáció:", ln=1)
-
-    pdf.set_font(base, "", 12)
-    pdf.multi_cell(0, 6, f"Taktikai fókusz: {period_targets['taktikai']}")
-    pdf.multi_cell(0, 6, f"Technikai fókusz: {period_targets['technikai']}")
-    pdf.multi_cell(0, 6, f"Kondicionális fókusz: {period_targets['kondi']}")
-    pdf.multi_cell(0, 6, f"Intenzitási szorzó: {period_targets['szorzo']}")
+    pdf.multi_cell(0, 6, pdf_safe(f"Edző: {coach_name}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Csapat: {team_name}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Korosztály: {age_group}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Hét: {week}"))
 
     pdf.ln(4)
     pdf.set_font(base, "B", 12)
-    pdf.cell(0, 8, "Edzői megjegyzés:", ln=1)
+    pdf.cell(0, 8, pdf_safe("Heti periodizáció:"), ln=1)
     pdf.set_font(base, "", 12)
-    pdf.multi_cell(0, 6, coach_notes)
+    pdf.multi_cell(0, 6, pdf_safe(f"Taktikai fókusz: {period_targets['taktikai']}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Technikai fókusz: {period_targets['technikai']}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Kondicionális fókusz: {period_targets['kondi']}"))
+    pdf.multi_cell(0, 6, pdf_safe(f"Intenzitási szorzó: {period_targets['szorzo']}"))
 
-    # ------------ Gyakorlatlapok ----------------
+    pdf.ln(4)
+    pdf.set_font(base, "B", 12)
+    pdf.cell(0, 8, pdf_safe("Edzői megjegyzés:"), ln=1)
+    pdf.set_font(base, "", 12)
+    pdf.multi_cell(0, 6, pdf_safe(coach_notes))
+
+    # Gyakorlatok
     for block in st.session_state.plan:
         pdf.add_page()
 
@@ -687,7 +662,8 @@ def create_pdf():
         ex = block["exercise"]
 
         pdf.set_font(base, "B", 14)
-        pdf.cell(0, 10, stage, ln=1)
+        pdf.cell(0, 10, pdf_safe(stage_label(stage)), ln=1)
+        pdf.ln(3)
 
         img = ex.get("file_name")
         if stage == "cel3" and st.session_state.match_override:
@@ -697,24 +673,26 @@ def create_pdf():
             try:
                 pdf.image(img, w=150)
             except:
-                pdf.multi_cell(0, 6, "Kép nem tölthető be.")
+                pdf.multi_cell(0, 6, pdf_safe("Kép nem tölthető be."))
 
         pdf.ln(5)
 
         pdf.set_font(base, "B", 12)
-        pdf.cell(0, 6, "Leírás:", ln=1)
+        pdf.cell(0, 6, pdf_safe("Leírás:"), ln=1)
         pdf.set_font(base, "", 12)
-        pdf.multi_cell(0, 6, ex.get("description", ""))
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("description", "")))
+        pdf.ln(2)
 
         pdf.set_font(base, "B", 12)
-        pdf.cell(0, 6, "Szervezés:", ln=1)
+        pdf.cell(0, 6, pdf_safe("Szervezés:"), ln=1)
         pdf.set_font(base, "", 12)
-        pdf.multi_cell(0, 6, ex.get("organisation", ""))
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("organisation", "")))
+        pdf.ln(2)
 
         pdf.set_font(base, "B", 12)
-        pdf.cell(0, 6, "Coaching pontok:", ln=1)
+        pdf.cell(0, 6, pdf_safe("Coaching pontok:"), ln=1)
         pdf.set_font(base, "", 12)
-        pdf.multi_cell(0, 6, ex.get("coaching_points", ""))
+        pdf.multi_cell(0, 6, pdf_safe(ex.get("coaching_points", "")))
 
     raw = pdf.output(dest="S")
     return raw if isinstance(raw, bytes) else raw.encode("latin-1", "ignore")
